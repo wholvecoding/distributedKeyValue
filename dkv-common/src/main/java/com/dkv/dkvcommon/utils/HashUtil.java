@@ -13,7 +13,9 @@ public class HashUtil {
      * 计算字符串的哈希值 (非负数)
      */
     public static int getHash(String key) {
-        if (key == null) return 0;
+        if(key == null) {
+            return 0;
+        }
         int hash = HASH_FUNCTION.hashString(key, StandardCharsets.UTF_8).asInt();
         // 保证是正数 (取绝对值)
         return hash < 0 ? Math.abs(hash) : hash;
