@@ -1,7 +1,6 @@
 // KvMessage.java
-package com.dkv.dkvstorage.rocksdb;
+package com.dkv.dkvcommon.model;
 import java.io.Serializable;
-import java.util.Arrays;
 
 public class KvMessage implements Serializable {
     private static final long serialVersionUID = 1L;

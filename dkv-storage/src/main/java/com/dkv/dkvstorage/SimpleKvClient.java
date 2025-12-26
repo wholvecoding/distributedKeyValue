@@ -1,6 +1,7 @@
 package com.dkv.dkvstorage;
 
-import com.dkv.dkvstorage.rocksdb.KvMessage;
+
+import com.dkv.dkvcommon.model.KvMessage;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;

@@ -1,4 +1,5 @@
 package com.dkv.dkvstorage.rocksdb;
+import com.dkv.dkvcommon.model.KvMessage;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -9,10 +10,10 @@ import io.netty.handler.codec.serialization.ObjectDecoder;
 import io.netty.handler.codec.serialization.ObjectEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+
 
 public class ReplicationService {
     private static final Logger logger = LoggerFactory.getLogger(ReplicationService.class);
@@ -137,6 +138,8 @@ public class ReplicationService {
         String host = parts[0];
         int port = Integer.parseInt(parts[1]);
 
+        final CompletableFuture<KvMessage> responseFuture = new CompletableFuture<>();
+
         Bootstrap b = new Bootstrap();
         b.group(workerGroup)
                 .channel(NioSocketChannel.class)
@@ -152,20 +155,70 @@ public class ReplicationService {
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 3000)
                 .option(ChannelOption.SO_KEEPALIVE, true);
 
-        // 连接到副本节点
-        ChannelFuture f = b.connect(host, port).sync();
-        Channel channel = f.channel();
+//        // 连接到副本节点
+//        ChannelFuture f = b.connect(host, port).sync();
+//        Channel channel = f.channel();
+//
+//        // 发送消息
+//        channel.writeAndFlush(message).sync();
+//
+//        // 等待响应（简化处理，实际应该更复杂）
+//        Thread.sleep(100);
+//
+//        // 关闭连接
+//        channel.close().sync();
 
-        // 发送消息
-        channel.writeAndFlush(message).sync();
+        Channel channel = null;
+        try {
+            // 连接到副本节点
+            ChannelFuture connectFuture = b.connect(host, port);
 
-        // 等待响应（简化处理，实际应该更复杂）
-        Thread.sleep(100);
+            // 等待连接建立，设置连接超时
+            if (!connectFuture.await(3000, TimeUnit.MILLISECONDS)) {
+                logger.warn("Connection timeout to replica: {}", replicaAddr);
+                return false;
+            }
 
-        // 关闭连接
-        channel.close().sync();
+            if (!connectFuture.isSuccess()) {
+                logger.warn("Failed to connect to replica {}: {}", replicaAddr, connectFuture.cause().getMessage());
+                return false;
+            }
 
-        return true;
+            channel = connectFuture.channel();
+
+            // 发送消息
+            ChannelFuture sendFuture = channel.writeAndFlush(message);
+
+            // 等待发送完成
+            sendFuture.await(1000, TimeUnit.MILLISECONDS);
+            if (!sendFuture.isSuccess()) {
+                logger.warn("Failed to send replication message to {}: {}",
+                        replicaAddr, sendFuture.cause().getMessage());
+                return false;
+            }
+
+            // 等待响应，设置响应超时
+            try {
+                // 只等待响应完成，不关心响应内容
+                responseFuture.get(replicationTimeout, TimeUnit.MILLISECONDS);
+                logger.debug("Received successful response from replica: {}", replicaAddr);
+                return true;
+
+            } catch (TimeoutException e) {
+                logger.warn("Response timeout from replica {} for key: {}", replicaAddr, message.getKey());
+                return false;
+            } catch (Exception e) {
+                logger.error("Error while waiting for response from replica {}: {}",
+                        replicaAddr, e.getMessage());
+                return false;
+            }
+
+        } finally {
+            // 确保连接关闭
+            if (channel != null && channel.isActive()) {
+                channel.close().awaitUninterruptibly(1000, TimeUnit.MILLISECONDS);
+            }
+        }
     }
 
     /**

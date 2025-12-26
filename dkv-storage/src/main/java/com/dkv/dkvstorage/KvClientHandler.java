@@ -1,6 +1,7 @@
 package com.dkv.dkvstorage;
 
-import com.dkv.dkvstorage.rocksdb.KvMessage;
+
+import com.dkv.dkvcommon.model.KvMessage;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import java.util.concurrent.CompletableFuture;

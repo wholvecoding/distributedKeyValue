@@ -1,7 +1,7 @@
 package com.dkv.dkvstorage;
-import com.dkv.dkvstorage.SimpleKvClient;
-import com.dkv.dkvstorage.rocksdb.KvMessage;
 
+
+import com.dkv.dkvcommon.model.KvMessage;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
