@@ -2,8 +2,8 @@ package com.dkv.dkvmaster.router;
 
 import com.dkv.dkvcommon.utils.HashUtil;
 
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.util.*;
+import java.util.stream.Stream;
 
 /**
  * （一致性哈希）：
@@ -72,5 +72,31 @@ public class ConsistentHashRouter {
 
         // 4. 返回那个节点的真实 IP
         return ring.get(targetHash);
+    }
+    /**
+     * 返回一组节点（主节点 + 副本节点）
+     * @param replicaCount 副本数量，通常为 3
+     */
+    public List<String> routeNodeWithReplicas(String key, int replicaCount) {
+        if (ring.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<String> nodes = new ArrayList<>();
+        int hash = HashUtil.getHash(key);
+
+        // 1. 获取从该哈希值开始的所有后继节点
+        SortedMap<Integer, String> tailMap = ring.tailMap(hash);
+
+        // 2. 将后继节点和环的前半部分拼接（实现环形遍历）
+        // distinct() 是为了跳过同一个物理节点的不同虚拟节点
+        Iterator<String> it = Stream.concat(tailMap.values().stream(), ring.values().stream())
+                .distinct()
+                .iterator();
+
+        while (it.hasNext() && nodes.size() < replicaCount) {
+            nodes.add(it.next());
+        }
+        return nodes;
     }
 }

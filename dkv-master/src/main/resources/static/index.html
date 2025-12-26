@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>分布式键值对集群监控仪表盘</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.1/echarts.min.js"></script>
+    <style>
+        body { background-color: #f8f9fa; padding-top: 2rem; }
+        .card { border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-radius: 12px; margin-bottom: 1.5rem; }
+        .node-badge { font-size: 0.9rem; margin-right: 0.5rem; background-color: #e3f2fd; color: #0d47a1; border: 1px solid #bbdefb; }
+        #ring-chart { height: 400px; width: 100%; }
+        .result-box { background: #fdfdfe; border-left: 4px solid #4caf50; padding: 1rem; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header class="pb-3 mb-4 border-bottom d-flex justify-content-between align-items-center">
+        <span class="fs-4 fw-bold text-primary">🛰️ Mini-DKV Master Console</span>
+        <span id="update-time" class="text-muted small">最后更新: --:--:--</span>
+    </header>
+
+    <div class="row">
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold">🖥️ 当前在线 DataNodes</h5>
+                    <hr>
+                    <div id="nodes-container" class="d-flex flex-wrap gap-2">
+                        <span class="text-muted">正在检索集群状态...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold">🔍 路由模拟器</h5>
+                    <p class="card-text small text-muted">输入 Key 模拟一致性哈希路由过程</p>
+                    <div class="input-group mb-3">
+                        <input type="text" id="key-input" class="form-control" placeholder="输入 Key (如: user_id_1001)">
+                        <button class="btn btn-primary" onclick="queryRoute()">查询路由</button>
+                    </div>
+                    <div id="route-result" class="result-box d-none">
+                        <div class="small text-muted mb-1">路由结果：</div>
+                        <div class="mb-2"><strong>主节点:</strong> <span id="res-primary" class="badge bg-success"></span></div>
+                        <div><strong>副本节点:</strong> <div id="res-replicas" class="mt-1"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold">🎡 一致性哈希环分布</h5>
+                    <div id="ring-chart"></div>
+                    <p class="small text-center text-muted">展示物理节点在哈希空间中的覆盖比例</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let myChart = echarts.init(document.getElementById('ring-chart'));
+
+    // 1. 定时刷新节点列表和图表
+    function refreshStatus() {
+        fetch('/api/nodes')
+            .then(res => res.json())
+            .then(nodes => {
+                updateNodeList(nodes);
+                updateChart(nodes);
+                document.getElementById('update-time').innerText = '最后更新: ' + new Date().toLocaleTimeString();
+            });
+    }
+
+    function updateNodeList(nodes) {
+        const container = document.getElementById('nodes-container');
+        if (nodes.length === 0) {
+            container.innerHTML = '<span class="text-danger small">警告: 集群内暂无可用节点</span>';
+            return;
+        }
+        container.innerHTML = nodes.map(ip => `<span class="badge node-badge">🖥️ ${ip}</span>`).join('');
+    }
+
+    function updateChart(nodes) {
+        // 模拟各节点在环上的均匀分布（仅为示意图，展示节点占比）
+        const data = nodes.map(ip => ({ name: ip, value: 1 }));
+        const option = {
+            tooltip: { trigger: 'item' },
+            legend: { bottom: '5%', left: 'center' },
+            series: [{
+                name: '哈希空间占比',
+                type: 'pie',
+                radius: ['40%', '70%'],
+                avoidLabelOverlap: false,
+                itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+                label: { show: false },
+                data: data.length > 0 ? data : [{name: '无节点', value: 1, itemStyle: {color: '#eee'}}]
+            }]
+        };
+        myChart.setOption(option);
+    }
+
+    // 2. 查询路由逻辑
+    function queryRoute() {
+        const key = document.getElementById('key-input').value;
+        if(!key) return;
+
+        fetch(`/api/route?key=${key}`)
+            .then(res => res.json())
+            .then(data => {
+                const resBox = document.getElementById('route-result');
+                resBox.classList.remove('d-none');
+
+                document.getElementById('res-primary').innerText = data.primary;
+                const replicasDiv = document.getElementById('res-replicas');
+                replicasDiv.innerHTML = data.replicas.map(ip => `<span class="badge bg-secondary me-1">${ip}</span>`).join('') || '<span class="text-muted small">无备用副本</span>';
+            });
+    }
+
+    // 初始化运行
+    refreshStatus();
+    setInterval(refreshStatus, 3000); // 每3秒刷新一次
+    window.addEventListener('resize', () => myChart.resize());
+</script>
+
+</body>
+</html>

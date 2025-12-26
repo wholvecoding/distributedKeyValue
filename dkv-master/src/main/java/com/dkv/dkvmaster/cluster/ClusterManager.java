@@ -3,9 +3,13 @@ package com.dkv.dkvmaster.cluster;
 import com.dkv.dkvmaster.router.ConsistentHashRouter;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.recipes.cache.ChildData;
 import org.apache.curator.framework.recipes.cache.PathChildrenCache;
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent;
 import org.apache.curator.retry.ExponentialBackoffRetry;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class ClusterManager {
     private CuratorFramework client;
@@ -55,6 +59,23 @@ public class ClusterManager {
         System.out.println("Master 启动成功，正在监听节点变化...");
     }
 
+    /**
+     * 获取当前所有在线的 DataNode 列表
+     * @return 节点 IP:Port 字符串列表
+     */
+    public List<String> getOnlineNodes() {
+        // 1. nodesCache.getCurrentData() 会返回当前监听到的所有子节点数据列表
+        List<ChildData> currentData = nodesCache.getCurrentData();
+
+        // 2. 使用 Java 8 Stream 流进行转换
+        return currentData.stream()
+                // 获取每个节点的完整路径，例如 "/nodes/127.0.0.1:8080"
+                .map(ChildData::getPath)
+                // 调用你之前写好的 getNodeName 方法，把路径切分，只留 IP:Port
+                .map(this::getNodeName)
+                // 转换为 List 返回
+                .collect(Collectors.toList());
+    }
     private String getNodeName(String fullPath) {
         // fullPath 可能是 /nodes/192.168.1.1:8080
         return fullPath.substring(fullPath.lastIndexOf("/") + 1);
