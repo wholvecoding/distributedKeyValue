@@ -13,6 +13,9 @@
     <version>0.0.1-SNAPSHOT</version>
     <name>distributedKeyValue</name>
     <description>distributedKeyValue</description>
+    <modules>
+        <module>dkv-storage</module>
+    </modules>
     <packaging>pom</packaging>
     <url/>
     <licenses>
@@ -82,6 +85,13 @@
                 <artifactId>slf4j-api</artifactId>
                 <version>${slf4j.version}</version>
             </dependency>
+
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-simple</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 
