@@ -12,6 +12,11 @@
     <artifactId>dkv-storage</artifactId>
     <dependencies>
         <dependency>
+            <groupId>com.dkv</groupId>
+            <artifactId>dkv-master</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+        <dependency>
             <groupId>org.rocksdb</groupId>
             <artifactId>rocksdbjni</artifactId>
             <version>${rocksdb.version}</version>

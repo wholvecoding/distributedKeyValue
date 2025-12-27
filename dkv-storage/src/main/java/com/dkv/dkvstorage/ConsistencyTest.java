@@ -35,7 +35,7 @@ public class ConsistencyTest {
         KvMessage r1 = primary.send(put1);
         System.out.println("[PUT-1] " + r1.getMessage());
 
-        Thread.sleep(1500);
+//        Thread.sleep(1500);
 
         KvMessage get1 = new KvMessage(KvMessage.Type.GET, key, null);
         get1.setRequestId(UUID.randomUUID().toString());

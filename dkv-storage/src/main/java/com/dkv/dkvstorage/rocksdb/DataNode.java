@@ -1,5 +1,6 @@
 package com.dkv.dkvstorage.rocksdb;
 // DataNode.java
+import com.dkv.dkvmaster.cluster.ClusterManager;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -8,6 +9,11 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.serialization.ClassResolvers;
 import io.netty.handler.codec.serialization.ObjectDecoder;
 import io.netty.handler.codec.serialization.ObjectEncoder;
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.CreateMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,6 +35,7 @@ public class DataNode {
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private Channel serverChannel;
+    private ClusterManager manager;
 
     public DataNode(String nodeId, String dataDir, int port,
                     boolean isPrimary, List<String> replicaNodes, int replicationFactor) {
@@ -49,13 +56,13 @@ public class DataNode {
         // 1. 初始化存储引擎
         storageEngine = new RocksDbEngine();
         storageEngine.init(dataDir);
-
+//        manager.addNodeToZk(nodeId, port);
         // 2. 初始化复制服务
         replicationService = new ReplicationService(storageEngine, replicaNodes, isPrimary, replicationFactor);
 
         // 3. 启动Netty服务器
         startNettyServer();
-
+        registerToZookeeper("127.0.0.1:2181");
         logger.info("DataNode {} started successfully", nodeId);
     }
 
@@ -96,7 +103,21 @@ public class DataNode {
             throw e;
         }
     }
+    private void registerToZookeeper(String zkAddress ) throws Exception {
+        // 这里使用 Curator 框架简单实现，或者调用你已经写好的工具类
+        RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+        CuratorFramework client = CuratorFrameworkFactory.newClient(zkAddress, retryPolicy);
+        client.start();
 
+        String path = "/dkv/nodes/" + this.nodeId + ":"+this.port;
+        if (client.checkExists().forPath(path) == null) {
+            client.create()
+                    .creatingParentsIfNeeded()
+                    .withMode(CreateMode.EPHEMERAL)
+                    .forPath(path);
+            logger.info("注册成功: {}", path);
+        }
+    }
     public void stop() {
         logger.info("Stopping DataNode {}", nodeId);
 

@@ -32,8 +32,8 @@ public class MasterController {
          router.addNode(nodeIp);
     }
     @GetMapping("/addtozk")
-    public void addNodes2ZK(@RequestParam("nodeip") String nodeIp) throws Exception {
-        clusterManager.addNodeToZk(nodeIp);
+    public void addNodes2ZK(@RequestParam("nodeip") String nodeIp, @RequestParam("port")Integer port) throws Exception {
+        clusterManager.addNodeToZk(nodeIp,port);
     }
     @PostMapping("/delete")
     public void deleteNode(@RequestParam("nodeip") String nodeIp){
