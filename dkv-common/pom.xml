@@ -12,6 +12,7 @@
     <artifactId>dkv-common</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>dkv-common</name>
+    <packaging>jar</packaging>
     <description>dkv-common</description>
     <url/>
     <licenses>
@@ -51,6 +52,9 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
             </plugin>
         </plugins>
     </build>

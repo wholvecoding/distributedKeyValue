@@ -17,12 +17,12 @@ public class KvClientHandler extends SimpleChannelInboundHandler<KvMessage> {
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, KvMessage msg) {
         future.complete(msg);
-        ctx.close();
+        ctx.channel().close();
     }
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         future.completeExceptionally(cause);
-        ctx.close();
+        ctx.channel().close();
     }
 }

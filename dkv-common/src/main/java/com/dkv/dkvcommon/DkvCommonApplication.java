@@ -7,7 +7,9 @@ package com.dkv.dkvcommon;
 public class DkvCommonApplication {
 
     public static void main(String[] args) {
-//        SpringApplication.run(DkvCommonApplication.class, args);
+
+        System.out.println("dkv-common module");
+        //        SpringApplication.run(DkvCommonApplication.class, args);
     }
 
 }

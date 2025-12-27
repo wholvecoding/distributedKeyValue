@@ -23,6 +23,10 @@ public class MasterController {
     }
 
     // 查看当前所有在线节点
+    @GetMapping("/home")
+    public String home() {
+        return "here is home";
+    }
     @GetMapping("/nodes")
     public List<String> getOnlineNodes() {
         return clusterManager.getOnlineNodes();

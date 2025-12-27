@@ -14,7 +14,10 @@
     <name>distributedKeyValue</name>
     <description>distributedKeyValue</description>
     <modules>
+        <module>dkv-common</module>
         <module>dkv-storage</module>
+        <module>dkv-client</module>
+        <module>dkv-master</module>
     </modules>
     <packaging>pom</packaging>
     <url/>
@@ -31,8 +34,8 @@
         <url/>
     </scm>
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <netty.version>4.1.86.Final</netty.version>
