@@ -1,12 +1,20 @@
 package com.dkv.dkvmaster.cluster;
 
 import com.dkv.dkvmaster.router.ConsistentHashRouter;
+import jakarta.annotation.PostConstruct;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.framework.recipes.cache.ChildData;
 import org.apache.curator.framework.recipes.cache.PathChildrenCache;
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent;
 import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.CreateMode;
+import org.springframework.stereotype.Component;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Component
 public class ClusterManager {
     private CuratorFramework client;
     private PathChildrenCache nodesCache;
@@ -15,7 +23,7 @@ public class ClusterManager {
     public ClusterManager(ConsistentHashRouter router) {
         this.router = router;
     }
-
+    @PostConstruct
     public void start() throws Exception {
         // 1. 启动 ZK 客户端
         client = CuratorFrameworkFactory.builder()
@@ -39,7 +47,6 @@ public class ClusterManager {
                 // ZK 发来通知："/nodes/192.168.1.5:8080" 出现了
                 String nodeIp = getNodeName(event.getData().getPath());
 
-                // 考勤员大喊：哈希环，快把这个人加进去！
                 router.addNode(nodeIp);
             }
             // 情况 2：有节点下线 (DataNode 挂了/断网了)
@@ -47,7 +54,6 @@ public class ClusterManager {
                 // ZK 发来通知："/nodes/192.168.1.5:8080" 消失了
                 String nodeIp = getNodeName(event.getData().getPath());
 
-                // 考勤员大喊：哈希环，把这个人踢出去！
                 router.removeNode(nodeIp);
             }
         });
@@ -55,6 +61,34 @@ public class ClusterManager {
         System.out.println("Master 启动成功，正在监听节点变化...");
     }
 
+    // 在 ClusterManager.java 中添加或修改
+    public void addNodeToZk(String nodeIp) throws Exception {
+        String path = "/nodes/" + nodeIp;
+        // 检查节点是否存在，不存在则创建
+        if (client.checkExists().forPath(path) == null) {
+            client.create()
+                    .creatingParentsIfNeeded()
+                    .withMode(CreateMode.EPHEMERAL) // 临时节点，断开就消失
+                    .forPath(path);
+        }
+    }
+    /**
+     * 获取当前所有在线的 DataNode 列表
+     * @return 节点 IP:Port 字符串列表
+     */
+    public List<String> getOnlineNodes() {
+        // 1. nodesCache.getCurrentData() 会返回当前监听到的所有子节点数据列表
+        List<ChildData> currentData = nodesCache.getCurrentData();
+
+        // 2. 使用 Java 8 Stream 流进行转换
+        return currentData.stream()
+                // 获取每个节点的完整路径，例如 "/nodes/127.0.0.1:8080"
+                .map(ChildData::getPath)
+                // 调用你之前写好的 getNodeName 方法，把路径切分，只留 IP:Port
+                .map(this::getNodeName)
+                // 转换为 List 返回
+                .collect(Collectors.toList());
+    }
     private String getNodeName(String fullPath) {
         // fullPath 可能是 /nodes/192.168.1.1:8080
         return fullPath.substring(fullPath.lastIndexOf("/") + 1);
