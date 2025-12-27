@@ -15,6 +15,7 @@
     <description>distributedKeyValue</description>
     <modules>
         <module>dkv-storage</module>
+        <module>untitled</module>
     </modules>
     <packaging>pom</packaging>
     <url/>
