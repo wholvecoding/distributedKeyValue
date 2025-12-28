@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>DKV Client Web Console</title>
+    <style>
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            background: #f4f6f8;
+            display: flex;
+            justify-content: center;
+            padding-top: 60px;
+        }
+
+        .container {
+            width: 420px;
+            background: #ffffff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            color: white;
+        }
+
+        .btn-save { background-color: #4CAF50; }
+        .btn-get { background-color: #2196F3; }
+        .btn-del { background-color: #f44336; }
+
+        .result {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f1f1f1;
+            border-radius: 6px;
+            min-height: 40px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>DKV Client 控制台</h2>
+
+    <input id="key" type="text" placeholder="Key">
+    <input id="value" type="text" placeholder="Value (仅保存时需要)">
+
+    <button class="btn-save" onclick="save()">保存 (PUT)</button>
+    <button class="btn-get" onclick="get()">查询 (GET)</button>
+    <button class="btn-del" onclick="del()">删除 (DELETE)</button>
+
+    <div class="result" id="result">返回结果显示在这里</div>
+</div>
+
+<script>
+    const baseUrl = "http://127.0.0.1:8082/api/kv";
+
+    function save() {
+        const key = document.getElementById("key").value;
+        const value = document.getElementById("value").value;
+
+        fetch(`${baseUrl}/save?key=${key}&value=${value}`, {
+            method: "POST"
+        })
+            .then(res => res.text())
+            .then(data => showResult(data))
+            .catch(err => showResult("Error: " + err));
+    }
+
+    function get() {
+        const key = document.getElementById("key").value;
+
+        fetch(`${baseUrl}/get?key=${key}`)
+            .then(res => res.text())
+            .then(data => showResult(data))
+            .catch(err => showResult("Error: " + err));
+    }
+
+    function del() {
+        const key = document.getElementById("key").value;
+
+        fetch(`${baseUrl}/delete?key=${key}`, {
+            method: "DELETE"
+        })
+            .then(res => res.text())
+            .then(data => showResult(data))
+            .catch(err => showResult("Error: " + err));
+    }
+
+    function showResult(text) {
+        document.getElementById("result").innerText = text;
+    }
+</script>
+
+</body>
+</html>

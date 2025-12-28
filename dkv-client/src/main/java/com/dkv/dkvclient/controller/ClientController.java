@@ -8,6 +8,7 @@ import java.util.Arrays;
 
 @RestController
 @RequestMapping("/api/kv")
+@CrossOrigin(origins = "*")   // 允许所有来源访问
 public class ClientController {
 
     private DkvClient client;
