@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.dkv.dkvcommon.model.KvMessage.Type.DELETE;
+
 
 public class ReplicationService {
     private static final Logger logger = LoggerFactory.getLogger(ReplicationService.class);
@@ -52,7 +54,7 @@ public class ReplicationService {
     /**
      * 同步复制：等待所有从副本确认（强一致性）
      */
-    public boolean syncReplicate(String key, byte[] value) throws Exception {
+    public boolean syncReplicate(KvMessage msg, String key, byte[] value) throws Exception {
         if (!isPrimary) {
             throw new IllegalStateException("Only primary node can initiate replication");
         }
@@ -61,14 +63,15 @@ public class ReplicationService {
             return true;  // 没有从副本，直接返回成功
         }
 
-        CountDownLatch latch = new CountDownLatch(replicaNodes.size());
         AtomicInteger successCount = new AtomicInteger(0);
         AtomicInteger failureCount = new AtomicInteger(0);
-
-        // 创建复制请求
+        CountDownLatch latch = new CountDownLatch(replicaNodes.size());
         KvMessage replicationMsg = new KvMessage(KvMessage.Type.REPLICATION_PUT, key, value);
-        replicationMsg.setReplication(true);
 
+        if (DELETE.equals(msg.getType())) {
+            replicationMsg.setType(DELETE);
+        }
+        replicationMsg.setReplication(true);
         // 并发发送到所有从副本
         for (String replicaAddr : replicaNodes) {
             replicationExecutor.submit(() -> {
@@ -106,7 +109,7 @@ public class ReplicationService {
     /**
      * 异步复制：不等待从副本确认（最终一致性）
      */
-    public void asyncReplicate(String key, byte[] value) {
+    public void asyncReplicate(KvMessage msg,String key, byte[] value) {
         if (!isPrimary || replicaNodes.isEmpty()) {
             return;
         }
@@ -154,19 +157,6 @@ public class ReplicationService {
                 })
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 3000)
                 .option(ChannelOption.SO_KEEPALIVE, true);
-
-//        // 连接到副本节点
-//        ChannelFuture f = b.connect(host, port).sync();
-//        Channel channel = f.channel();
-//
-//        // 发送消息
-//        channel.writeAndFlush(message).sync();
-//
-//        // 等待响应（简化处理，实际应该更复杂）
-//        Thread.sleep(100);
-//
-//        // 关闭连接
-//        channel.close().sync();
 
         Channel channel = null;
         try {
@@ -229,6 +219,9 @@ public class ReplicationService {
             if (message.getType() == KvMessage.Type.REPLICATION_PUT) {
                 storageEngine.put(message.getKey(), message.getValue());
                 logger.debug("Received replication PUT for key: {}", message.getKey());
+            }else if(message.getType() == DELETE){
+                storageEngine.delete(message.getKey());
+                logger.debug("Received replication delete for key: {}", message.getKey());
             }
         }
     }

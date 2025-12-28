@@ -78,7 +78,7 @@ public class DkvServerHandler extends SimpleChannelInboundHandler<KvMessage> {
 
         // 如果是主节点，需要复制到从节点
         if (isPrimary && !msg.isReplication()) {
-            boolean replicationSuccess = replicationService.syncReplicate(key, value);
+            boolean replicationSuccess = replicationService.syncReplicate(msg, key, value);
 
             if (replicationSuccess) {
                 response.setStatusCode(200);
@@ -87,7 +87,7 @@ public class DkvServerHandler extends SimpleChannelInboundHandler<KvMessage> {
                 // 复制失败，可能需要回滚或记录警告
                 response.setStatusCode(202);  // Accepted但复制不完全
                 response.setMessage("Put successful but replication incomplete");
-                logger.warn("Replication incomplete for key: {}", key);
+                logger.warn("PUT Replication incomplete for key: {}", key);
             }
         } else {
             response.setStatusCode(200);
@@ -127,14 +127,25 @@ public class DkvServerHandler extends SimpleChannelInboundHandler<KvMessage> {
 
         storageEngine.delete(key);
 
-        // 如果是主节点，需要复制删除操作到从节点
+
+        // 如果是主节点，需要复制到从节点
         if (isPrimary && !msg.isReplication()) {
-            // 注意：对于删除操作，我们需要特殊的处理
-            replicationService.asyncReplicate(key, null);  // 简化处理
+            boolean replicationSuccess = replicationService.syncReplicate(msg, key, null);
+
+            if (replicationSuccess) {
+                response.setStatusCode(200);
+                response.setMessage("Delete successful with replication");
+            } else {
+                // 复制失败，可能需要回滚或记录警告
+                response.setStatusCode(202);  // Accepted但复制不完全
+                response.setMessage("Delete successful but replication incomplete");
+                logger.warn("DELETE Replication incomplete for key: {}", key);
+            }
+        } else {
+            response.setStatusCode(200);
+            response.setMessage("Put successful");
         }
 
-        response.setStatusCode(200);
-        response.setMessage("Delete successful");
     }
 
     @Override
