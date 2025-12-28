@@ -32,16 +32,17 @@ public class MasterController {
         return clusterManager.getOnlineNodes();
     }
     @GetMapping("/add")
-    public void addNodes(@RequestParam("nodeip") String nodeIp){
-         router.addNode(nodeIp);
+    public void addNodes(@RequestParam("nodeip") String nodeIp,@RequestParam("port")Integer port){
+         router.addNode(nodeIp,port);
     }
     @GetMapping("/addtozk")
     public void addNodes2ZK(@RequestParam("nodeip") String nodeIp) throws Exception {
         clusterManager.addNodeToZk(nodeIp);
     }
     @PostMapping("/delete")
-    public void deleteNode(@RequestParam("nodeip") String nodeIp){
-        router.removeNode(nodeIp);
+    public void deleteNode(@RequestParam("nodeip") String nodeIp,@RequestParam("port") Integer port) throws Exception {
+
+        clusterManager.offlineNode(nodeIp, port);
     }
     // 查询 Key 的路由信息
     @GetMapping("/route")

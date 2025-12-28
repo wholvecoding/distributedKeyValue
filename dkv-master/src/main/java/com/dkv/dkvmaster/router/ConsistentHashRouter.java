@@ -23,11 +23,11 @@ public class ConsistentHashRouter {
      * 添加物理节点
      * @param nodeIp 例如 "192.168.1.5:8080"
      */
-    public synchronized void addNode(String nodeIp) {
+    public synchronized void addNode(String nodeIp,Integer port ) {
         for (int i = 0; i < VIRTUAL_NODES; i++) {
             // 构造虚拟节点名称，例如 "192.168.1.5:8080#1"
             //作用：让数据分布更加均匀，避免数据倾斜
-            String virtualNodeName = nodeIp + "#" + i;
+            String virtualNodeName = nodeIp +":"+port+ "#" + i;
             int hash = HashUtil.getHash(virtualNodeName);
             ring.put(hash, nodeIp);
         }
@@ -37,9 +37,9 @@ public class ConsistentHashRouter {
     /**
      * 移除物理节点
      */
-    public synchronized void removeNode(String nodeIp) {
+    public synchronized void removeNode(String nodeIp, Integer port ) {
         for (int i = 0; i < VIRTUAL_NODES; i++) {
-            String virtualNodeName = nodeIp + "#" + i;
+            String virtualNodeName = nodeIp +":"+port+ "#" + i;
             int hash = HashUtil.getHash(virtualNodeName);
             ring.remove(hash);
         }

@@ -42,19 +42,22 @@ public class ClusterManager {
         nodesCache.start();
 
         nodesCache.getListenable().addListener((client, event) -> {
+            String nodeIPport = getNodeName(event.getData().getPath());
+            String nodeIp = nodeIPport.split(":")[0];
+            Integer port = Integer.valueOf(nodeIPport.split(":")[1]);
+
             // 情况 1：有新节点上线 (DataNode 启动了)
             if (event.getType() == PathChildrenCacheEvent.Type.CHILD_ADDED) {
                 // ZK 发来通知："/nodes/192.168.1.5:8080" 出现了
-                String nodeIp = getNodeName(event.getData().getPath());
 
-                router.addNode(nodeIp);
+                router.addNode(nodeIp,port );
             }
             // 情况 2：有节点下线 (DataNode 挂了/断网了)
             else if (event.getType() == PathChildrenCacheEvent.Type.CHILD_REMOVED) {
                 // ZK 发来通知："/nodes/192.168.1.5:8080" 消失了
-                String nodeIp = getNodeName(event.getData().getPath());
+               nodeIp = getNodeName(event.getData().getPath());
 
-                router.removeNode(nodeIp);
+                router.removeNode(nodeIp,port);
             }
         });
 
@@ -71,6 +74,18 @@ public class ClusterManager {
                     .withMode(CreateMode.EPHEMERAL) // 临时节点，断开就消失
                     .forPath(path);
         }
+    }
+    public void offlineNode(String nodeIp, Integer port ) throws Exception {
+        // 1. 从 ZooKeeper 中删除对应的临时节点
+        // 假设路径格式为 /nodes/127.0.0.1:9001
+        String path = "/nodes/" + nodeIp+":"+port;
+        if (client.checkExists().forPath(path) != null) {
+            client.delete().forPath(path);
+            System.out.println("ZooKeeper 节点已强制移除: " + path);
+        }
+
+        // 2. 调用 router 清理本地哈希环
+        router.removeNode(nodeIp,port);
     }
     /**
      * 获取当前所有在线的 DataNode 列表
