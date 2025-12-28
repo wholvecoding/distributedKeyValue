@@ -29,7 +29,7 @@ public class ClusterManager {
         client = CuratorFrameworkFactory.builder()
                 .connectString("127.0.0.1:2181") // ⚠️ 实际开发请放到配置文件里
                 .retryPolicy(new ExponentialBackoffRetry(1000, 3))
-                .namespace("dkv") // 所有的路径自动加上 /mini-dkv 前缀
+                .namespace("dkv") // 所有的路径自动加上 dkv 前缀
                 .build();
         client.start();
 

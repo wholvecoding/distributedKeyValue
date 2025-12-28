@@ -35,7 +35,7 @@ public class ConsistencyTest {
         KvMessage r1 = primary.send(put1);
         System.out.println("[PUT-1] " + r1.getMessage());
 
-        Thread.sleep(1500);
+//        Thread.sleep(1500);
 
         KvMessage get1 = new KvMessage(KvMessage.Type.GET, key, null);
         get1.setRequestId(UUID.randomUUID().toString());
@@ -45,6 +45,7 @@ public class ConsistencyTest {
                 new String(g1.getValue(), StandardCharsets.UTF_8);
 
         System.out.println("[GET-1] replica value=" + rv1);
+
 
         // =====================
         // 2. 第二次写（覆盖）
@@ -73,6 +74,22 @@ public class ConsistencyTest {
 
         System.out.println("[GET-2] replica value=" + rv2);
 
+        KvMessage delete = new KvMessage(
+                KvMessage.Type.DELETE,
+                key,
+                v2.getBytes(StandardCharsets.UTF_8)
+        );
+        delete.setRequestId(UUID.randomUUID().toString());
+        KvMessage dr = primary.send(delete);
+        System.out.println(dr.getMessage());
+
+        KvMessage get3 = new KvMessage(
+                KvMessage.Type.GET,
+                key,
+                v2.getBytes(StandardCharsets.UTF_8)
+        );
+        KvMessage r3 = replica1.send(get3);
+        System.out.println(r3.getMessage());
         // =====================
         // 3. 一致性判断
         // =====================
