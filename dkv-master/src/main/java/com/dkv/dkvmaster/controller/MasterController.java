@@ -36,8 +36,9 @@ public class MasterController {
          router.addNode(nodeIp,port);
     }
     @GetMapping("/addtozk")
-    public void addNodes2ZK(@RequestParam("nodeip") String nodeIp) throws Exception {
-        clusterManager.addNodeToZk(nodeIp);
+    public void addNodes2ZK(@RequestParam("nodeip") String nodeIp, @RequestParam("port")Integer port  ) throws Exception {
+        clusterManager.addNodeToZk(nodeIp,port);
+
     }
     @PostMapping("/delete")
     public void deleteNode(@RequestParam("nodeip") String nodeIp,@RequestParam("port") Integer port) throws Exception {
@@ -46,12 +47,13 @@ public class MasterController {
     }
     // 查询 Key 的路由信息
     @GetMapping("/route")
-    public Map<String, Object> getRoute(@RequestParam String key, @RequestParam(defaultValue = "3") int replicas) {
+        public Map<String, Object> getRoute(@RequestParam String key, @RequestParam(defaultValue = "3") int replicas) {
         List<String> targets = router.routeNodeWithReplicas(key, replicas);
         Map<String, Object> response = new HashMap<>();
         response.put("key", key);
         response.put("hash", String.format("0x%08X", key.hashCode())); // 展示哈希值
         response.put("primary", targets.isEmpty() ? "None" : targets.get(0));
+        response.put("secondary", targets.size() > 1 ? targets.subList(1, targets.size()) : Collections.emptyList());
         response.put("replicas", targets.size() <= 1 ? Collections.emptyList() : targets.subList(1, targets.size()));
         return response;
     }

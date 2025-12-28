@@ -2,130 +2,243 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>Mini-DKV 集群监控仪表盘</title>
+    <title>Mini-DKV 全功能管理系统 - 竖向版</title>
     <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.2.3/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.4.1/echarts.min.js"></script>
     <style>
-        body { background-color: #f8f9fa; padding-top: 2rem; }
-        .card { border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-radius: 12px; margin-bottom: 1.5rem; }
-        .node-badge { font-size: 0.9rem; margin-right: 0.5rem; background-color: #e3f2fd; color: #0d47a1; border: 1px solid #bbdefb; }
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', system-ui, sans-serif; padding-bottom: 3rem; }
+        .main-header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 1rem 2rem; position: sticky; top: 0; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+
+        /* 卡片统一样式 */
+        .card { border: none; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); margin-bottom: 1.5rem; overflow: hidden; }
+        .card-header { background: transparent; border-bottom: 1px solid #f0f0f0; padding: 1.25rem 1.5rem; display: flex; align-items: center; justify-content: space-between; }
+        .card-title { font-weight: 700; color: #333; margin: 0; font-size: 1.15rem; }
+
+        /* 节点状态样式 */
+        .node-badge { background: #eef2ff; color: #4338ca; border: 1px solid #e0e7ff; padding: 8px 16px; border-radius: 10px; font-weight: 500; transition: all 0.2s; }
+        .node-badge:hover { background: #e0e7ff; transform: translateY(-2px); }
+
+        /* 图表容器 */
         #ring-chart { height: 400px; width: 100%; }
-        .result-box { background: #fdfdfe; border-left: 4px solid #4caf50; padding: 1rem; border-radius: 4px; }
+
+        /* 控制台样式 */
+        .console-wrapper { background: #1e1e1e; border-radius: 12px; padding: 20px; position: relative; }
+        .result-box { color: #d4d4d4; font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.95rem; height: 250px; overflow-y: auto; line-height: 1.6; }
+        .result-box .cmd { color: #569cd6; }
+        .result-box .success { color: #4ec9b0; }
+        .result-box .error { color: #f44747; }
+
+        /* 按钮组 */
+        .action-btns .btn { padding: 12px; font-weight: 600; border-radius: 10px; transition: all 0.2s; }
+        .action-btns .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <header class="pb-3 mb-4 border-bottom d-flex justify-content-between align-items-center">
-        <span class="fs-4 fw-bold text-primary">🛰️ Mini-DKV Master Console</span>
-        <span id="update-time" class="text-muted small">最后更新: --:--:--</span>
-    </header>
+<header class="main-header d-flex justify-content-between align-items-center">
+    <span class="fs-4 fw-bold text-primary">🛰️ Mini-DKV Master & Client Console</span>
+    <div id="update-time" class="text-muted small">最后同步: --:--:--</div>
+</header>
 
+<div class="container mt-4">
     <div class="row">
-        <div class="col-lg-5">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title fw-bold">🖥️ 当前在线 DataNodes</h5>
-                    <hr>
-                    <div id="nodes-container" class="d-flex flex-wrap gap-2">
-                        <span class="text-muted">正在检索集群状态...</span>
-                    </div>
-                </div>
-            </div>
 
+        <div class="col-12">
             <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">🖥️ 节点状态与管理</h5>
+                    <span class="badge bg-success opacity-75">实时连接</span>
+                </div>
                 <div class="card-body">
-                    <h5 class="card-title fw-bold">🔍 路由模拟器</h5>
-                    <p class="card-text small text-muted">输入 Key 模拟一致性哈希路由过程</p>
-                    <div class="input-group mb-3">
-                        <input type="text" id="key-input" class="form-control" placeholder="输入 Key (如: user_id_1001)">
-                        <button class="btn btn-primary" onclick="queryRoute()">查询路由</button>
-                    </div>
-                    <div id="route-result" class="result-box d-none">
-                        <div class="small text-muted mb-1">路由结果：</div>
-                        <div class="mb-2"><strong>主节点:</strong> <span id="res-primary" class="badge bg-success"></span></div>
-                        <div><strong>副本节点:</strong> <div id="res-replicas" class="mt-1"></div></div>
+                    <div class="row align-items-center">
+                        <div class="col-md-7 border-end">
+                            <label class="form-label text-muted small fw-bold mb-3">当前在线节点</label>
+                            <div id="nodes-container" class="d-flex flex-wrap gap-2">
+                                <span class="text-muted">正在检索集群状态...</span>
+                            </div>
+                        </div>
+                        <div class="col-md-5 ps-md-4 mt-3 mt-md-0">
+                            <label class="form-label text-muted small fw-bold mb-3">手动管理</label>
+                            <div class="input-group mb-2">
+                                <input type="text" id="node-ip" class="form-control" placeholder="IP (127.0.0.1)">
+                                <input type="number" id="node-port" class="form-control" style="max-width: 100px;" placeholder="端口">
+                                <button class="btn btn-primary" onclick="manageNode('addtozk')">注册</button>
+                                <button class="btn btn-outline-danger" onclick="manageNode('delete')">下线</button>
+                            </div>
+                            <div id="manage-msg" class="small text-end"></div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="col-lg-7">
+        <div class="col-12">
             <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">⚡ 数据操作控制台</h5>
+                </div>
                 <div class="card-body">
-                    <h5 class="card-title fw-bold">🎡 一致性哈希环分布</h5>
-                    <div id="ring-chart"></div>
-                    <p class="small text-center text-muted">展示物理节点在哈希空间中的覆盖比例</p>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">KEY</label>
+                                <input id="kv-key" type="text" class="form-control form-control-lg bg-light" placeholder="e.g. user_101">
+                            </div>
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">VALUE</label>
+                                <textarea id="kv-value" class="form-control bg-light" rows="4" placeholder="JSON 或 文本内容..."></textarea>
+                            </div>
+                            <div class="action-btns d-grid gap-2">
+                                <div class="row g-2">
+                                    <div class="col-6"><button class="btn btn-primary w-100" onclick="kvOp('get')">读取 (GET)</button></div>
+                                    <div class="col-6"><button class="btn btn-success w-100" onclick="kvOp('save')">写入 (PUT)</button></div>
+                                </div>
+                                <button class="btn btn-danger w-100" onclick="kvOp('delete')">删除 (DELETE)</button>
+                            </div>
+                        </div>
+                        <div class="col-md-8 ps-md-4 mt-3 mt-md-0">
+                            <label class="form-label fw-bold text-muted">CONSOLE OUTPUT</label>
+                            <div class="console-wrapper">
+                                <div class="result-box" id="kv-result">
+                                    <span class="cmd">> Waiting for instructions...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">🎡 一致性哈希可视化</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-7">
+                            <div id="ring-chart"></div>
+                        </div>
+                        <div class="col-md-5 ps-md-5">
+                            <div class="p-4 bg-light rounded-4">
+                                <h6 class="fw-bold mb-3">🔍 路由模拟追踪</h6>
+                                <p class="text-muted small">模拟 Key 在环上的落点物理节点</p>
+                                <div class="input-group mb-4">
+                                    <input type="text" id="route-key" class="form-control border-primary" placeholder="输入测试 Key">
+                                    <button class="btn btn-primary px-4" onclick="queryRoute()">追踪</button>
+                                </div>
+                                <div id="route-result" class="d-none animate__animated animate__fadeIn">
+                                    <div class="small text-muted mb-1">目标主节点 (Primary):</div>
+                                    <div class="h4 text-primary fw-bold" id="res-primary">--</div>
+                                </div>
+                                <div>
+                                    <small class="text-muted d-block text-start">副本节点 (Secondary):</small>
+                                    <div id="res-secondary" class="mt-1">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
 <script>
+    // 逻辑部分保持不变，确保 api 路径正确
+    const MASTER_API = "/api";
+    const CLIENT_API = "http://127.0.0.1:8082/api/kv";
     let myChart = echarts.init(document.getElementById('ring-chart'));
 
-    // 1. 定时刷新节点列表和图表
     function refreshStatus() {
-        fetch('/api/nodes')
+        fetch(`${MASTER_API}/nodes`)
             .then(res => res.json())
             .then(nodes => {
                 updateNodeList(nodes);
                 updateChart(nodes);
-                document.getElementById('update-time').innerText = '最后更新: ' + new Date().toLocaleTimeString();
+                document.getElementById('update-time').innerText = '最后同步: ' + new Date().toLocaleTimeString();
             });
     }
 
     function updateNodeList(nodes) {
         const container = document.getElementById('nodes-container');
-        if (nodes.length === 0) {
-            container.innerHTML = '<span class="text-danger small">警告: 集群内暂无可用节点</span>';
-            return;
-        }
-        container.innerHTML = nodes.map(ip => `<span class="badge node-badge">🖥️ ${ip}</span>`).join('');
+        container.innerHTML = nodes.map(ip => `<span class="node-badge">🖥️ ${ip}</span>`).join('') || '<span class="text-danger">集群无可用节点</span>';
     }
 
     function updateChart(nodes) {
-        // 模拟各节点在环上的均匀分布（仅为示意图，展示节点占比）
         const data = nodes.map(ip => ({ name: ip, value: 1 }));
-        const option = {
+        myChart.setOption({
             tooltip: { trigger: 'item' },
-            legend: { bottom: '5%', left: 'center' },
             series: [{
-                name: '哈希空间占比',
-                type: 'pie',
-                radius: ['40%', '70%'],
-                avoidLabelOverlap: false,
-                itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
+                type: 'pie', radius: ['55%', '85%'],
+                itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 4 },
                 label: { show: false },
-                data: data.length > 0 ? data : [{name: '无节点', value: 1, itemStyle: {color: '#eee'}}]
+                data: data.length > 0 ? data : [{name: 'Empty', value: 1, itemStyle: {color: '#f0f0f0'}}]
             }]
-        };
-        myChart.setOption(option);
+        });
     }
 
-    // 2. 查询路由逻辑
-    function queryRoute() {
-        const key = document.getElementById('key-input').value;
+    function kvOp(type) {
+        const key = document.getElementById("kv-key").value;
+        const value = document.getElementById("kv-value").value;
+        const resBox = document.getElementById("kv-result");
         if(!key) return;
 
-        fetch(`/api/route?key=${key}`)
-            .then(res => res.json())
-            .then(data => {
-                const resBox = document.getElementById('route-result');
-                resBox.classList.remove('d-none');
+        let url = `${CLIENT_API}/${type}?key=${key}`;
+        if(type === 'save') url += `&value=${encodeURIComponent(value)}`;
 
-                document.getElementById('res-primary').innerText = data.primary;
-                const replicasDiv = document.getElementById('res-replicas');
-                replicasDiv.innerHTML = data.replicas.map(ip => `<span class="badge bg-secondary me-1">${ip}</span>`).join('') || '<span class="text-muted small">无备用副本</span>';
+        resBox.innerHTML += `<div class="cmd mt-2">> [${type.toUpperCase()}] ${key}</div>`;
+
+        fetch(url, { method: (type === 'save' ? 'POST' : (type === 'delete' ? 'DELETE' : 'GET')) })
+            .then(res => res.text())
+            .then(data => {
+                resBox.innerHTML += `<div class="success">  Response: ${data}</div>`;
+                resBox.scrollTop = resBox.scrollHeight;
+            })
+            .catch(err => {
+                resBox.innerHTML += `<div class="error">  Error: ${err}</div>`;
             });
     }
 
-    // 初始化运行
+    function queryRoute() {
+        const key = document.getElementById('route-key').value;
+        if(!key) return;
+
+        fetch(`${MASTER_API}/route?key=${key}`)
+            .then(res => res.json())
+            .then(data => {
+                const resultDiv = document.getElementById('route-result');
+                resultDiv.classList.remove('d-none');
+
+                // 展示主节点
+                document.getElementById('res-primary').innerText = data.primary;
+
+                // 展示副本节点 (Secondary Nodes)
+                const secondaryContainer = document.getElementById('res-secondary');
+                if (secondaryContainer) {
+                    if (data.secondary && data.secondary.length > 0) {
+                        secondaryContainer.innerHTML = data.secondary
+                            .map(node => `<span class="badge bg-secondary me-1">${node}</span>`)
+                            .join('');
+                    } else {
+                        secondaryContainer.innerHTML = '<span class="text-muted small">无副本节点</span>';
+                    }
+                }
+            })
+            .catch(err => console.error("路由查询失败:", err));
+    }
+
+    function manageNode(action) {
+        const ip = document.getElementById('node-ip').value;
+        const port = document.getElementById('node-port').value;
+        fetch(`${MASTER_API}/${action}?nodeip=${ip}&port=${port}`).then(() => refreshStatus());
+    }
+
     refreshStatus();
-    setInterval(refreshStatus, 3000); // 每3秒刷新一次
+    setInterval(refreshStatus, 3000);
     window.addEventListener('resize', () => myChart.resize());
 </script>
-
 </body>
 </html>

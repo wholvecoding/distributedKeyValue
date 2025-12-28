@@ -31,7 +31,7 @@ public class ConsistentHashRouter {
             int hash = HashUtil.getHash(virtualNodeName);
             ring.put(hash, nodeIp);
         }
-        System.out.println("节点上线: " + nodeIp + "，当前环大小: " + ring.size());
+//        System.out.println("节点上线: " + nodeIp + "，当前环大小: " + ring.size());
     }
 
     /**
@@ -43,7 +43,7 @@ public class ConsistentHashRouter {
             int hash = HashUtil.getHash(virtualNodeName);
             ring.remove(hash);
         }
-        System.out.println("节点下线: " + nodeIp + "，当前环大小: " + ring.size());
+//        System.out.println("节点下线: " + nodeIp + "，当前环大小: " + ring.size());
     }
 
     /**
