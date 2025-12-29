@@ -8,11 +8,6 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.serialization.ClassResolvers;
 import io.netty.handler.codec.serialization.ObjectDecoder;
 import io.netty.handler.codec.serialization.ObjectEncoder;
-import org.apache.curator.RetryPolicy;
-import org.apache.curator.framework.CuratorFramework;
-import org.apache.curator.framework.CuratorFrameworkFactory;
-import org.apache.curator.retry.ExponentialBackoffRetry;
-import org.apache.zookeeper.CreateMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +29,7 @@ public class DataNode {
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private Channel serverChannel;
+
 
     public DataNode(String nodeId, String dataDir, int port,
                     boolean isPrimary, List<String> replicaNodes, int replicationFactor) {
@@ -60,7 +56,6 @@ public class DataNode {
 
         // 3. 启动Netty服务器
         startNettyServer();
-        registerToZookeeper("127.0.0.1:2181");
 
         logger.info("DataNode {} started successfully", nodeId);
     }
@@ -102,21 +97,7 @@ public class DataNode {
             throw e;
         }
     }
-    private void registerToZookeeper(String zkAddress ) throws Exception {
-        // 这里使用 Curator 框架简单实现，或者调用你已经写好的工具类
-        RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
-        CuratorFramework client = CuratorFrameworkFactory.newClient(zkAddress, retryPolicy);
-        client.start();
 
-        String path = "/dkv/nodes/" + this.nodeId + ":"+this.port;
-        if (client.checkExists().forPath(path) == null) {
-            client.create()
-                    .creatingParentsIfNeeded()
-                    .withMode(CreateMode.EPHEMERAL)
-                    .forPath(path);
-            logger.info("注册成功: {}", path);
-        }
-    }
     public void stop() {
         logger.info("Stopping DataNode {}", nodeId);
 
@@ -148,36 +129,4 @@ public class DataNode {
         return serverChannel != null && serverChannel.isActive();
     }
 
-//    public static void main(String[] args) throws Exception {
-//        if (args.length < 5) {
-//            System.err.println(
-//                    "Usage: <nodeId> <dataDir> <port> <isPrimary> <replicaNodes>");
-//            System.exit(1);
-//        }
-//
-//        String nodeId = args[0];
-//        String dataDir = args[1];
-//        int port = Integer.parseInt(args[2]);
-//        boolean isPrimary = Boolean.parseBoolean(args[3]);
-//
-//        // replicaNodes: "127.0.0.1:9002,127.0.0.1:9003"
-//        List<String> replicaNodes = args[4].isEmpty()
-//                ? List.of()
-//                : Arrays.asList(args[4].split(","));
-//
-//        int replicationFactor = replicaNodes.size() + 1;
-//
-//        DataNode node = new DataNode(
-//                nodeId,
-//                dataDir,
-//                port,
-//                isPrimary,
-//                replicaNodes,
-//                replicationFactor
-//        );
-//
-//        node.start();
-//
-//        Runtime.getRuntime().addShutdownHook(new Thread(node::stop));
-//    }
 }
