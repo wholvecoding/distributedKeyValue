@@ -14,6 +14,13 @@ import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.util.List;
 
+
+import org.apache.curator.RetryPolicy;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.CreateMode;
+
 public class DataNode {
     private static final Logger logger = LoggerFactory.getLogger(DataNode.class);
 
@@ -56,6 +63,9 @@ public class DataNode {
 
         // 3. 启动Netty服务器
         startNettyServer();
+
+        startNettyServer();
+//        registerToZookeeper("127.0.0.1:2181");
 
         logger.info("DataNode {} started successfully", nodeId);
     }
@@ -127,6 +137,23 @@ public class DataNode {
     // 健康检查
     public boolean isHealthy() {
         return serverChannel != null && serverChannel.isActive();
+    }
+
+
+    private void registerToZookeeper(String zkAddress ) throws Exception {
+        // 这里使用 Curator 框架简单实现，或者调用你已经写好的工具类
+        RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
+        CuratorFramework client = CuratorFrameworkFactory.newClient(zkAddress, retryPolicy);
+        client.start();
+
+        String path = "/dkv/nodes/" + this.nodeId + ":"+this.port;
+        if (client.checkExists().forPath(path) == null) {
+            client.create()
+                    .creatingParentsIfNeeded()
+                    .withMode(CreateMode.EPHEMERAL)
+                    .forPath(path);
+            logger.info("注册成功: {}", path);
+        }
     }
 
 }

@@ -144,34 +144,34 @@ public class DataNodeController {
         }
     }
 
-    /**
-     * 集群健康检查
-     * curl "http://localhost:8080/api/datanode/health"
-     */
-    @GetMapping("/health")
-    public ResponseEntity<Map<String, Object>> healthCheck() {
-        Map<String, Object> response = new HashMap<>();
-
-        try {
-            var nodes = dataNodeManager.getAllNodes();
-            long runningCount = nodes.stream()
-                    .filter(n -> "RUNNING".equals(n.get("status")))
-                    .count();
-
-            response.put("status", "healthy");
-            response.put("timestamp", System.currentTimeMillis());
-            response.put("totalNodes", nodes.size());
-            response.put("runningNodes", runningCount);
-            response.put("success", true);
-
-            return ResponseEntity.ok(response);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            response.put("status", "unhealthy");
-            response.put("error", e.getMessage());
-            response.put("success", false);
-            return ResponseEntity.internalServerError().body(response);
-        }
-    }
+//    /**
+//     * 集群健康检查
+//     * curl "http://localhost:8080/api/datanode/health"
+//     */
+//    @GetMapping("/health")
+//    public ResponseEntity<Map<String, Object>> healthCheck() {
+//        Map<String, Object> response = new HashMap<>();
+//
+//        try {
+//            var nodes = dataNodeManager.getAllNodes();
+//            long runningCount = nodes.stream()
+//                    .filter(n -> "RUNNING".equals(n.get("status")))
+//                    .count();
+//
+//            response.put("status",nodes.size() > runningCount / 2 ? "healthy" : "unhealthy");
+//            response.put("timestamp", System.currentTimeMillis());
+//            response.put("totalNodes", nodes.size());
+//            response.put("runningNodes", runningCount);
+//            response.put("success", true);
+//
+//            return ResponseEntity.ok(response);
+//
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//            response.put("status", "unhealthy");
+//            response.put("error", e.getMessage());
+//            response.put("success", false);
+//            return ResponseEntity.internalServerError().body(response);
+//        }
+//    }
 }

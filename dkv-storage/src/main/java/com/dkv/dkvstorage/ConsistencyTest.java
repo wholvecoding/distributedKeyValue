@@ -46,6 +46,7 @@ public class ConsistencyTest {
 
         System.out.println("[GET-1] replica value=" + rv1);
 
+
         // =====================
         // 2. 第二次写（覆盖）
         // =====================
@@ -62,7 +63,7 @@ public class ConsistencyTest {
         System.out.println("[PUT-2] " + r2.getMessage());
 
         // 等待复制
-//        Thread.sleep(2000);
+        Thread.sleep(2000);
 
         KvMessage get2 = new KvMessage(KvMessage.Type.GET, key, null);
         get2.setRequestId(UUID.randomUUID().toString());
@@ -72,26 +73,6 @@ public class ConsistencyTest {
                 new String(g2.getValue(), StandardCharsets.UTF_8);
 
         System.out.println("[GET-2] replica value=" + rv2);
-
-        // =====================
-        // 3. 一致性判断
-        // =====================
-        if(v1.equals(rv1))
-        {
-            System.out.println("✅ PUT CONSISTENT");
-        }else{
-            System.out.println("❌ PUT INCONSISTENT");
-        }
-
-        if (v2.equals(rv2)) {
-            System.out.println("✅ UPDATE CONSISTENT");
-        } else {
-            System.out.println("❌ UPDATE INCONSISTENT");
-        }
-
-        // =====================
-        // 3. 删除
-        // =====================
 
         KvMessage delete = new KvMessage(
                 KvMessage.Type.DELETE,
@@ -107,8 +88,22 @@ public class ConsistencyTest {
                 key,
                 v2.getBytes(StandardCharsets.UTF_8)
         );
-        get3.setRequestId(UUID.randomUUID().toString());
         KvMessage r3 = replica1.send(get3);
         System.out.println(r3.getMessage());
+        // =====================
+        // 3. 一致性判断
+        // =====================
+        if(v1.equals(rv1))
+        {
+            System.out.println("✅ PUT CONSISTENT");
+        }else{
+            System.out.println("❌ PUT INCONSISTENT");
+        }
+
+        if (v2.equals(rv2)) {
+            System.out.println("✅ UPDATE CONSISTENT");
+        } else {
+            System.out.println("❌ UPDATE INCONSISTENT");
+        }
     }
 }
