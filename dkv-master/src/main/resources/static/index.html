@@ -162,9 +162,27 @@
             });
     }
 
+    // 添加跳转事件
     function updateNodeList(nodes) {
         const container = document.getElementById('nodes-container');
-        container.innerHTML = nodes.map(ip => `<span class="node-badge">🖥️ ${ip}</span>`).join('') || '<span class="text-danger">集群无可用节点</span>';
+
+        if (!nodes || nodes.length === 0) {
+            container.innerHTML = '<span class="text-danger">集群无可用节点</span>';
+            return;
+        }
+
+        container.innerHTML = nodes.map(ip => `
+        <span class="node-badge"
+              style="cursor:pointer;"
+              onclick="goToNodeDetail('${ip}')">
+            🖥️ ${ip}
+        </span>
+    `).join('');
+    }
+
+    // 跳转函数
+    function goToNodeDetail(node) {
+        window.location.href = `/node-detail.html?node=${encodeURIComponent(node)}`;
     }
 
     function updateChart(nodes) {
