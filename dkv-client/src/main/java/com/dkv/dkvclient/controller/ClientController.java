@@ -29,8 +29,8 @@ public class ClientController {
     @PostMapping("/save")
     public String save(@RequestParam String key, @RequestParam String value) {
         try {
-            client.put(key, value.getBytes());
-            return "Saved key: " + key + ", value: " + value;
+            String savedNode = client.put(key, value.getBytes());
+            return "Saved key: " + key + " to Node: " + savedNode + ", value: " + value;
         } catch (Exception e) {
             e.printStackTrace();
             return "Failed to save key: " + key + ", error: " + e.getMessage();

@@ -13,7 +13,8 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.zookeeper.Watcher;
-
+import org.springframework.web.client.RestTemplate;
+import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -64,22 +65,28 @@ public class DkvClient {
         System.out.println("[DkvClient] Current nodes: " + nodes);
     }
 
-    /** 简单一致性哈希计算目标节点 */
+    /** 计算目标节点 */
     private String getTargetIp(String key) {
-        synchronized (nodes) {
-            if (nodes.isEmpty()) {
-                throw new RuntimeException("No available nodes in ZooKeeper!");
-            }
-            int hash = Math.abs(key.hashCode());
-            int idx = hash % nodes.size();
-            return nodes.get(idx);
-        }
+        return "127.0.0.1:9001";
+//        String url = "http://localhost:8081/api/route?key=" + key;
+//
+//        RestTemplate restTemplate = new RestTemplate();
+//        Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+//
+//        if (response == null || !response.containsKey("primary")) {
+//            return null;
+//        }
+//
+//        return (String) response.get("primary");
     }
 
+
     /** PUT 操作 */
-    public void put(String key, byte[] value) throws InterruptedException {
+    public String put(String key, byte[] value) throws InterruptedException {
         KvMessage message = new KvMessage(KvMessage.Type.PUT, key, value);
-        sendRequest(getTargetIp(key), message);
+        String primaryNode = getTargetIp(key);
+        sendRequest(primaryNode, message);
+        return primaryNode;
     }
 
     /** GET 操作 */
@@ -117,31 +124,8 @@ public class DkvClient {
                             );
                         }
                     });
-            ChannelFuture future = b.connect(host, port).sync();
-            CompletableFuture<KvMessage> responseFuture = new CompletableFuture<>();
-
-// 添加 handler 时，把 responseFuture 传入 handler
-            future.channel().pipeline().addLast(new KvClientHandler(responseFuture));
-
-// 发送请求
-            future.channel().writeAndFlush(request).sync();
-            System.out.println("Request sent, waiting for response...");
-
-            try {
-                // 等待响应，最多 5 秒
-                KvMessage response = responseFuture.get(1, TimeUnit.SECONDS);
-                System.out.println("Got response: " + response);
-            } catch (TimeoutException e) {
-                System.out.println("Response timed out, closing channel...");
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                // 超时或正常都要安全关闭 channel
-                future.channel().close().sync();
-                future.channel().closeFuture().sync();
-            }
-
-
+            Channel ch = b.connect(host, port).sync().channel();
+            ch.writeAndFlush(request).sync();
             return handler.getResponse();
         } catch (Exception e) {
             throw new RuntimeException(e);
