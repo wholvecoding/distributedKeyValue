@@ -68,14 +68,14 @@ public class ClusterManager {
     // 在 ClusterManager.java 中添加或修改
     public void addNodeToZk(String nodeIp, Integer port) throws Exception {
         String path = "/nodes/" + nodeIp+":"+port;
-        DataNode node = new DataNode(
-                config.id,
-                dataDir,
-                config.port,
-                config.isPrimary,
-                replicaNodes,
-                configs.length // 复制因子即总节点数
-        );
+//        DataNode node = new DataNode(
+//                config.id,
+//                dataDir,
+//                config.port,
+//                config.isPrimary,
+//                replicaNodes,
+//                configs.length // 复制因子即总节点数
+//        );
 
         // 检查节点是否存在，不存在则创建
         if (client.checkExists().forPath(path) == null) {

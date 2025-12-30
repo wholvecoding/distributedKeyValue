@@ -6,12 +6,9 @@ import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.string.StringDecoder;
-import io.netty.handler.codec.string.StringEncoder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -21,7 +18,7 @@ import java.util.concurrent.*;
 public class DataNodeAgent {
     private static final Logger logger = LoggerFactory.getLogger(DataNodeAgent.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
-    private static final int AGENT_PORT = 8081;
+    private static final int AGENT_PORT = 8085;
 
     private static final Map<String, DataNode> runningNodes = new ConcurrentHashMap<>();
     private static final ExecutorService executor = Executors.newCachedThreadPool();
@@ -40,8 +37,22 @@ public class DataNodeAgent {
                         @Override
                         protected void initChannel(SocketChannel ch) {
                             ch.pipeline()
-                                    .addLast(new StringDecoder(StandardCharsets.UTF_8))
-                                    .addLast(new StringEncoder(StandardCharsets.UTF_8))
+                                    // 替换掉 StringDecoder，加入 HTTP 支持
+                                    .addLast(new io.netty.handler.codec.http.HttpServerCodec())
+                                    .addLast(new io.netty.handler.codec.http.HttpObjectAggregator(65536))
+                                    .addLast(new SimpleChannelInboundHandler<io.netty.handler.codec.http.FullHttpRequest>() {
+                                        @Override
+                                        protected void channelRead0(ChannelHandlerContext ctx, io.netty.handler.codec.http.FullHttpRequest msg) throws Exception {
+                                            // 从 HTTP 中提取 Body 字符串
+                                            String content = msg.content().toString(io.netty.util.CharsetUtil.UTF_8);
+                                            // 逻辑交给原本的 Handler 或直接在这里处理
+                                            logger.info("Received HTTP JSON: {}", content);
+
+                                            // 这里可以调用你原来的解析逻辑...
+                                            // 注意：HTTP 需要返回标准的 HTTP Response，不能只发 JSON 字符串
+                                        }
+                                    }
+                                    )
                                     .addLast(new AgentCommandHandler());
                         }
                     })

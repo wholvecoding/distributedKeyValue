@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import java.util.Scanner;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"com.dkv.dkvmaster", "com.dkv.dkvstorage"})
 public class DkvMasterApplication implements CommandLineRunner {
 
     private final ClusterManager clusterManager;

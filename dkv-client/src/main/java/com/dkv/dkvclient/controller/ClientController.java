@@ -65,4 +65,17 @@ public class ClientController {
             return "Failed to delete key: " + key + ", error: " + e.getMessage();
         }
     }
+    @GetMapping("/test")
+    public String testIp(@RequestParam String IP, @RequestParam String key) {
+        try {
+            byte[] value = client.testIP(IP, key);
+            if (value == null) {
+                return "Key not found: " + key;
+            }
+            return new String(value);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Failed to get key: " + key + ", error: " + e.getMessage();
+        }
+    }
 }

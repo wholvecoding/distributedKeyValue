@@ -81,7 +81,7 @@ public class DataNodeLauncher {
                     node.start();
                     System.out.println(">>> 节点 [" + config.id + "] 启动成功，端口: " + config.port);
                 } catch (Exception e) {
-                    System.err.println(">>> 节点 [" + config.id + "] 启动失败: " + e.getMessage());
+                    System.err.println(">>> 节点 [" + config.id +":"+ config.port+ "] 启动失败: " + e.getMessage());
                 }
             }).start();
 

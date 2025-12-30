@@ -6,7 +6,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -16,9 +19,9 @@ public class DataNodeManager {
     private static final Logger logger = LoggerFactory.getLogger(DataNodeManager.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Value("${datanode.agent.port:8081}")
-    private int agentPort = 8081;
-
+    @Value("${datanode.agent.port:8085}")
+    private int agentPort = 8085;
+    private static final String AGENT_URL = "http://127.0.0.1:8085/agent/command";
     @Value("${datanode.netty.connect.timeout:5000}")
     private int connectTimeout = 5000;
 
@@ -28,7 +31,10 @@ public class DataNodeManager {
     private final Map<String, NettyAgentClient> clientPool = new ConcurrentHashMap<>();
     // 定时任务执行器
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
-
+    private final RestTemplate restTemplate = new RestTemplate();
+    public DataNodeManager() {
+        System.out.println("DataNodeManager 实例被创建: " + System.identityHashCode(this));
+    }
     public static class NodeInfo {
         private String nodeId;
         private String host;
@@ -74,87 +80,67 @@ public class DataNodeManager {
     /**
      * 启动DataNode（分布式版本）
      */
-    public boolean startDataNode(String nodeId, String host, int port, String dataDir,
-                                 boolean isPrimary, String replicas) {
-        try {
-            logger.info("Starting DataNode: nodeId={}, port={}, isPrimary={}, replicas={}",
-                    nodeId, port, isPrimary, replicas);
+    public boolean startDataNode(String nodeId, String host, int port, String dataDir, boolean isPrimary, String replicas) {
+        // 1. 本地注册信息
+        List<String> replicaList = Arrays.asList((replicas != null ? replicas : "").split(","));
+        NodeInfo nodeInfo = new NodeInfo(nodeId, host, port, dataDir, isPrimary, replicaList);
+        nodeInfo.setStatus(NodeStatus.STARTING);
+        nodeRegistry.put(nodeId, nodeInfo);
 
-            if (host == null) {
-                logger.error("Invalid nodeId format: {}", nodeId);
+        // 2. 发送 HTTP 请求给 Agent
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("action", "start");
+            payload.put("nodeId", nodeId);
+            payload.put("host", host);
+            payload.put("port", port);
+            payload.put("dataDir", dataDir);
+            payload.put("isPrimary", isPrimary);
+            payload.put("replicas", replicas);
+
+            // 发送 POST 请求
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    AGENT_URL,
+                    payload,
+                    Map.class
+            );
+
+            if (response.getStatusCode() == HttpStatus.OK &&
+                    Boolean.TRUE.equals(response.getBody().get("success"))) {
+
+                logger.info("Agent successfully started node {}", nodeId);
+                nodeInfo.setStatus(NodeStatus.RUNNING);
+                return true;
+            } else {
+                logger.error("Agent failed to start node: {}", response.getBody());
+                nodeInfo.setStatus(NodeStatus.ERROR);
                 return false;
             }
-
-            // 解析副本列表
-            List<String> replicaList = parseReplicaList(replicas);
-
-            // 创建节点信息
-            NodeInfo nodeInfo = new NodeInfo(nodeId, host, port, dataDir, isPrimary, replicaList);
-            nodeInfo.setStatus(NodeStatus.STARTING);
-            nodeRegistry.put(nodeId, nodeInfo);
-
-            // 异步启动节点
-            CompletableFuture.runAsync(() -> {
-                try {
-                    boolean started = startNodeInternal(nodeInfo);
-                    nodeInfo.setStatus(started ? NodeStatus.RUNNING : NodeStatus.ERROR);
-
-                    if (started) {
-                        logger.info("DataNode {} started successfully", nodeId);
-
-                        // 启动后定期健康检查
-                        scheduleHealthCheck(nodeId);
-                    } else {
-                        logger.error("Failed to start DataNode {}", nodeId);
-                    }
-                } catch (Exception e) {
-                    logger.error("Error starting DataNode {}: {}", nodeId, e.getMessage(), e);
-                    nodeInfo.setStatus(NodeStatus.ERROR);
-                }
-            });
-
-            return true;
-
         } catch (Exception e) {
-            logger.error("Exception in startDataNode: {}", e.getMessage(), e);
+            logger.error("Failed to communicate with Agent at {}", AGENT_URL, e);
+            nodeInfo.setStatus(NodeStatus.ERROR);
             return false;
         }
     }
 
     /**
-     * 停止DataNode
+     * 停止 DataNode
      */
     public boolean stopDataNode(String nodeId) {
         try {
-            NodeInfo nodeInfo = nodeRegistry.get(nodeId);
-            if (nodeInfo == null) {
-                logger.warn("Node {} not found in registry", nodeId);
-                return false;
-            }
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("action", "stop");
+            payload.put("nodeId", nodeId);
 
-            logger.info("Stopping DataNode: {}", nodeId);
-            nodeInfo.setStatus(NodeStatus.STOPPING);
+            restTemplate.postForEntity(AGENT_URL, payload, Map.class);
 
-            // 同步停止节点
-            boolean stopped = stopNodeInternal(nodeInfo);
-
-            if (stopped) {
-                nodeInfo.setStatus(NodeStatus.STOPPED);
-                nodeRegistry.remove(nodeId);
-                logger.info("DataNode {} stopped successfully", nodeId);
-            } else {
-                nodeInfo.setStatus(NodeStatus.ERROR);
-                logger.error("Failed to stop DataNode {}", nodeId);
-            }
-
-            return stopped;
-
+            nodeRegistry.remove(nodeId);
+            return true;
         } catch (Exception e) {
-            logger.error("Exception in stopDataNode: {}", e.getMessage(), e);
+            logger.error("Failed to stop node via Agent", e);
             return false;
         }
     }
-
     /**
      * 内部启动逻辑
      */

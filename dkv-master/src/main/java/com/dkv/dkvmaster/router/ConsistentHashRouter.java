@@ -19,6 +19,9 @@ public class ConsistentHashRouter {
     // 虚拟节点数：每个物理节点在环上变成 10 个虚拟节点，解决数据倾斜问题
     private static final int VIRTUAL_NODES = 10;
 
+    public Set<String> getRings() {
+        return new HashSet<>(ring.values());
+    }
     /**
      * 添加物理节点
      * @param nodeIp 例如 "192.168.1.5:8080"
@@ -28,8 +31,9 @@ public class ConsistentHashRouter {
             // 构造虚拟节点名称，例如 "192.168.1.5:8080#1"
             //作用：让数据分布更加均匀，避免数据倾斜
             String virtualNodeName = nodeIp +":"+port+ "#" + i;
+
             int hash = HashUtil.getHash(virtualNodeName);
-            ring.put(hash, nodeIp);
+            ring.put(hash, nodeIp +":"+port);
         }
 //        System.out.println("节点上线: " + nodeIp + "，当前环大小: " + ring.size());
     }
@@ -96,7 +100,7 @@ public class ConsistentHashRouter {
         Iterator<String> headIterator = ring.values().iterator();
 
         // 先从当前位置往后找
-        while (tailIterator.hasNext() && nodes.size() < replicas) {
+        while (tailIterator.hasNext() && nodes.size() <=replicas) {
             nodes.add(tailIterator.next());
         }
 
@@ -107,4 +111,103 @@ public class ConsistentHashRouter {
 
         return new ArrayList<>(nodes);
     }
+    // 在 ConsistentHashRouter.java 中添加
+    public synchronized String getPredecessorNode(int hash) {
+        SortedMap<Integer, String> headMap = ring.headMap(hash);
+        if (headMap.isEmpty()) {
+            return ring.get(ring.lastKey()); // 环状逻辑：取最后一个节点
+        }
+        return ring.get(headMap.lastKey());
+    }
+
+    public synchronized String getSuccessorNode(int hash) {
+        SortedMap<Integer, String> tailMap = ring.tailMap(hash + 1); // 找严格大于当前hash的
+        if (tailMap.isEmpty()) {
+            return ring.get(ring.firstKey()); // 环状逻辑：取第一个节点
+        }
+        return ring.get(tailMap.firstKey());
+    }
+//    public synchronized void addNodeWithBalancedMigration(String nodeIp, Integer port) {
+//        List<Integer> affectedHashes = new ArrayList<>();
+//        // 计算新节点的虚拟节点哈希值
+//        for (int i = 0; i < VIRTUAL_NODES; i++) {
+//            String virtualNodeName = nodeIp + ":" + port + "#" + i;
+//            int hash = HashUtil.getHash(virtualNodeName);
+//            affectedHashes.add(hash);
+//        }
+//
+//        // 计算新节点相邻的前后节点，并迁移数据
+//        for (int i = 0; i < VIRTUAL_NODES; i++) {
+//            String virtualNodeName = nodeIp + ":" + port + "#" + i;
+//            int hash = HashUtil.getHash(virtualNodeName);
+//
+//            // 获取新节点相邻的前驱节点和后继节点
+//            String predecessor = getPredecessorNode(hash);
+//            String successor = getSuccessorNode(hash);
+//
+//            // 仅迁移受影响的部分数据
+//            migrateData(predecessor, successor, nodeIp, port);
+//        }
+//
+//        // 执行节点添加
+//        for (int i = 0; i < VIRTUAL_NODES; i++) {
+//            String virtualNodeName = nodeIp + ":" + port + "#" + i;
+//            int hash = HashUtil.getHash(virtualNodeName);
+//            ring.put(hash, nodeIp + ":" + port);
+//        }
+//    }
+
+    // 数据迁移方法：根据前后节点获取受影响的数据并迁移
+//    private void migrateData(String predecessor, String successor, String nodeIp, Integer port) {
+//        List<String> affectedKeys = getAffectedKeys(predecessor, successor);
+//
+//        for (String key : affectedKeys) {
+//            String currentNode = routeNode(key);
+//            if (!currentNode.equals(nodeIp + ":" + port)) {
+//                // 迁移数据到新节点
+//                migrateKeyToNewNode(key, nodeIp + ":" + port);
+//            }
+//        }
+//    }
+
+    // 获取受影响的键：假设从前驱节点到后继节点之间的键都需要迁移
+//    private List<String> getAffectedKeys(String predecessor, String successor) {
+//        // 这里的实现依赖于具体的数据存储系统，我们假设RocksDB支持按范围查询
+//        List<String> keys = new ArrayList<>();
+//        try {
+//            // 假设你有一个方法来查询指定范围内的所有键
+//            ReadOptions readOptions = new ReadOptions();
+//            RocksIterator iterator = rocksDB.newIterator(readOptions);
+//
+//            // 从前驱节点的哈希值开始，直到后继节点的哈希值
+//            // 假设 getHash 生成的哈希值与键的顺序相关，实际中需要依据你的键的设计来调整
+//            byte[] startKey = predecessor.getBytes();
+//            byte[] endKey = successor.getBytes();
+//
+//            iterator.seek(startKey);
+//            while (iterator.isValid() && Arrays.compare(iterator.key(), endKey) < 0) {
+//                keys.add(new String(iterator.key()));
+//                iterator.next();
+//            }
+//        } catch (RocksDBException e) {
+//            e.printStackTrace();
+//        }
+//        return keys;
+//    }
+//
+//    // 迁移数据到新节点
+//    private void migrateKeyToNewNode(String key, String newNode) {
+//        try {
+//            // 从原节点读取数据并存储到新节点
+//            byte[] value = rocksDB.get(key.getBytes());
+//
+//            // 将数据迁移到新的节点（假设有方法支持这种操作）
+//            // 这里只是示例，具体的操作可以依据你的存储设计
+//            // 保存数据到新节点，可以选择将数据写入新节点相关的区域
+//            rocksDB.put(key.getBytes(), value);
+//        } catch (RocksDBException e) {
+//            e.printStackTrace();
+//        }
+//    }
+
 }

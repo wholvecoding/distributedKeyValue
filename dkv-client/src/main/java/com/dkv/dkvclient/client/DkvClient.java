@@ -13,9 +13,11 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.zookeeper.Watcher;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -66,20 +68,25 @@ public class DkvClient {
 
     /** 简单一致性哈希计算目标节点 */
     private String getTargetIp(String key) {
-        synchronized (nodes) {
-            if (nodes.isEmpty()) {
-                throw new RuntimeException("No available nodes in ZooKeeper!");
-            }
-            int hash = Math.abs(key.hashCode());
-            int idx = hash % nodes.size();
-            return nodes.get(idx);
+        String url = "http://localhost:8081/api/route?key=" + key;
+
+        RestTemplate restTemplate = new RestTemplate();
+        Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+
+        if (response == null || !response.containsKey("primary")) {
+            return null;
         }
+
+        return (String) response.get("primary");
     }
 
     /** PUT 操作 */
-    public void put(String key, byte[] value) throws InterruptedException {
+    public String put(String key, byte[] value) throws InterruptedException {
         KvMessage message = new KvMessage(KvMessage.Type.PUT, key, value);
-        sendRequest(getTargetIp(key), message);
+        String primaryNode = getTargetIp(key);
+        System.out.println("向节点{}发送请求"+primaryNode);
+        sendRequest(primaryNode, message);
+        return primaryNode;
     }
 
     /** GET 操作 */
@@ -148,5 +155,10 @@ public class DkvClient {
         } finally {
             group.shutdownGracefully();
         }
+    }
+    public byte[] testIP(String IP, String key) throws InterruptedException {
+        KvMessage request = new KvMessage(KvMessage.Type.GET, key, null);
+        KvMessage response = sendRequest(IP, request);
+        return response != null ? response.getValue() : null;
     }
 }

@@ -64,8 +64,8 @@ public class DataNode {
         // 3. 启动Netty服务器
         startNettyServer();
 
-        startNettyServer();
-//        registerToZookeeper("127.0.0.1:2181");
+//        startNettyServer();
+        registerToZookeeper("127.0.0.1:2181");
 
         logger.info("DataNode {} started successfully", nodeId);
     }
@@ -145,8 +145,8 @@ public class DataNode {
         RetryPolicy retryPolicy = new ExponentialBackoffRetry(1000, 3);
         CuratorFramework client = CuratorFrameworkFactory.newClient(zkAddress, retryPolicy);
         client.start();
-
-        String path = "/dkv/nodes/" + this.nodeId + ":"+this.port;
+        String host = this.nodeId.split(":")[0];
+        String path = "/dkv/nodes/" +host + ":"+this.port;
         if (client.checkExists().forPath(path) == null) {
             client.create()
                     .creatingParentsIfNeeded()
