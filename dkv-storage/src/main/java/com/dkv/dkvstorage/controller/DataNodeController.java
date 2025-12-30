@@ -1,6 +1,8 @@
 package com.dkv.dkvstorage.controller;
 
 import com.dkv.dkvstorage.rocksdb.DataNodeManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -12,6 +14,7 @@ import java.util.Map;
 @RequestMapping("/api/datanode")
 public class DataNodeController {
 
+    private static final Logger log = LoggerFactory.getLogger(DataNodeController.class);
     @Autowired
     private DataNodeManager dataNodeManager;
 
@@ -22,15 +25,15 @@ public class DataNodeController {
      *   -d '{
      *     "nodeId": "node1:9000",
      *     "dataDir": "/tmp/datanode1",
+     *     "host":"127.0.0.1",
      *     "port": 9000,
      *     "isPrimary": true,
-     *     "replicas": "node2:9001,node3:9002"
+     *     "replicas": "127.0.0.1:9001,127.0.0.1:9002"
      *   }'
      */
     @PostMapping("/start")
     public ResponseEntity<Map<String, Object>> startDataNode(@RequestBody Map<String, Object> request) {
         Map<String, Object> response = new HashMap<>();
-
         try {
             String nodeId = (String) request.get("nodeId");
             String host = (String) request.get("host");
@@ -38,9 +41,7 @@ public class DataNodeController {
             String dataDir = (String) request.get("dataDir");
             boolean isPrimary = (boolean) request.get("isPrimary");
             String replicas = (String) request.get("replicas");
-
             boolean success = dataNodeManager.startDataNode(nodeId, host, port, dataDir, isPrimary, replicas);
-
             if (success) {
                 response.put("success", true);
                 response.put("message", "DataNode start requested");
@@ -71,6 +72,7 @@ public class DataNodeController {
 
         try {
             String nodeId = (String) request.get("nodeId");
+            System.out.println(nodeId);
             boolean success = dataNodeManager.stopDataNode(nodeId);
 
             if (success) {

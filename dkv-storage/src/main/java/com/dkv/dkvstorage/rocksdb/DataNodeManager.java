@@ -161,10 +161,8 @@ public class DataNodeManager {
     private boolean startNodeInternal(NodeInfo nodeInfo) throws Exception {
         String nodeId = nodeInfo.getNodeId();
         String host = nodeInfo.getHost();
-
         // 获取或创建Netty客户端
         NettyAgentClient client = getOrCreateClient(host);
-
         // 构建启动请求
         Map<String, Object> request = new HashMap<>();
         request.put("nodeId", nodeId);
@@ -175,8 +173,9 @@ public class DataNodeManager {
         request.put("action", "start");
 
         // 发送请求到Agent
-        Map<String, Object> response = client.sendRequest(request);
+        Map<String, Object> response = client.sendAndReceive(request);
 
+        logger.info("send");
         if (response != null && Boolean.TRUE.equals(response.get("success"))) {
             logger.info("Start command sent successfully to {}", host);
             return true;
@@ -195,13 +194,14 @@ public class DataNodeManager {
         String host = nodeInfo.getHost();
 
         NettyAgentClient client = getOrCreateClient(host);
+        logger.info("Client get successful!");
 
         // 构建停止请求
         Map<String, Object> request = new HashMap<>();
         request.put("nodeId", nodeId);
         request.put("action", "stop");
 
-        Map<String, Object> response = client.sendRequest(request);
+        Map<String, Object> response = client.sendAndReceive(request);
 
         if (response != null && Boolean.TRUE.equals(response.get("success"))) {
             logger.info("Stop command sent successfully to {}", host);
@@ -218,14 +218,11 @@ public class DataNodeManager {
      */
     private synchronized NettyAgentClient getOrCreateClient(String host) throws Exception {
         String clientKey = host + ":" + agentPort;
-
         if (!clientPool.containsKey(clientKey)) {
             NettyAgentClient client = new NettyAgentClient(host, agentPort);
-            client.connect();
             clientPool.put(clientKey, client);
             logger.info("Created Netty client for {}:{}", host, agentPort);
         }
-
         return clientPool.get(clientKey);
     }
 
@@ -249,7 +246,7 @@ public class DataNodeManager {
             request.put("nodeId", nodeId);
             request.put("action", "status");
 
-            Map<String, Object> agentResponse = client.sendRequest(request);
+            Map<String, Object> agentResponse = client.sendAndReceive(request);
 
             Map<String, Object> result = new HashMap<>();
             result.put("nodeId", nodeId);
@@ -361,7 +358,7 @@ public class DataNodeManager {
         // 关闭客户端连接
         for (Map.Entry<String, NettyAgentClient> entry : clientPool.entrySet()) {
             try {
-                entry.getValue().disconnect();
+                entry.getValue().close();
             } catch (Exception e) {
                 logger.warn("Error disconnecting client {}: {}", entry.getKey(), e.getMessage());
             }

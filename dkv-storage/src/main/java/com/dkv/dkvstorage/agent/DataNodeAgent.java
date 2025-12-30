@@ -51,12 +51,12 @@ public class DataNodeAgent {
             ChannelFuture f = b.bind(AGENT_PORT).sync();
             logger.info("DataNode Agent started on port {}", AGENT_PORT);
 
-            // 添加关闭钩子
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                shutdown();
-                bossGroup.shutdownGracefully();
-                workerGroup.shutdownGracefully();
-            }));
+//            // 添加关闭钩子
+//            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+//                shutdown();
+//                bossGroup.shutdownGracefully();
+//                workerGroup.shutdownGracefully();
+//            }));
 
             f.channel().closeFuture().sync();
 
@@ -171,6 +171,7 @@ public class DataNodeAgent {
         private Map<String, Object> handleStop(Map<String, Object> request) {
             String nodeId = (String) request.get("nodeId");
             DataNode node = runningNodes.get(nodeId);
+            logger.info("Process Stop");
 
             if (node == null) {
                 return Map.of(
@@ -200,7 +201,7 @@ public class DataNodeAgent {
 
         private Map<String, Object> handleStatus(Map<String, Object> request) {
             String nodeId = (String) request.get("nodeId");
-
+            logger.info("Process Status");
             if (nodeId == null) {
                 // 返回所有节点状态
                 List<Map<String, Object>> nodesInfo = new ArrayList<>();

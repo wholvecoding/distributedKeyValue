@@ -64,8 +64,7 @@ public class DataNode {
         // 3. 启动Netty服务器
         startNettyServer();
 
-        startNettyServer();
-//        registerToZookeeper("127.0.0.1:2181");
+//      registerToZookeeper("127.0.0.1:2181");
 
         logger.info("DataNode {} started successfully", nodeId);
     }
@@ -95,7 +94,7 @@ public class DataNode {
                     })
                     .option(ChannelOption.SO_BACKLOG, 128)
                     .childOption(ChannelOption.SO_KEEPALIVE, true);
-
+            logger.info("port information");
             // 绑定端口，开始接收连接
             ChannelFuture f = b.bind(port).sync();
             serverChannel = f.channel();
