@@ -80,14 +80,21 @@
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-4">
-                            <div class="mb-3">
-                                <label class="form-label fw-bold">KEY</label>
-                                <input id="kv-key" type="text" class="form-control form-control-lg bg-light" placeholder="e.g. user_101">
+                            <div class="row g-2 mb-3">
+                                <div class="col-8">
+                                    <label class="form-label fw-bold">KEY</label>
+                                    <input id="kv-key" type="text" class="form-control form-control-lg bg-light" placeholder="e.g. user_101">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label fw-bold">副本数</label>
+                                    <input id="kv-replicas" type="number" class="form-control form-control-lg bg-light" value="3" min="1" max="10">
+                                </div>
                             </div>
                             <div class="mb-4">
                                 <label class="form-label fw-bold">VALUE</label>
                                 <textarea id="kv-value" class="form-control bg-light" rows="4" placeholder="JSON 或 文本内容..."></textarea>
                             </div>
+
                             <div class="action-btns d-grid gap-2">
                                 <div class="row g-2">
                                     <div class="col-6"><button class="btn btn-primary w-100" onclick="kvOp('get')">读取 (GET)</button></div>
@@ -97,7 +104,12 @@
                             </div>
                         </div>
                         <div class="col-md-8 ps-md-4 mt-3 mt-md-0">
-                            <label class="form-label fw-bold text-muted">CONSOLE OUTPUT</label>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold text-muted m-0">CONSOLE OUTPUT</label>
+                                <button class="btn btn-sm btn-outline-secondary" onclick="clearConsole()" style="font-size: 0.8rem; padding: 2px 8px;">
+                                    🧹 清空日志
+                                </button>
+                            </div>
                             <div class="console-wrapper">
                                 <div class="result-box" id="kv-result">
                                     <span class="cmd">> Waiting for instructions...</span>
@@ -153,11 +165,18 @@
 </div>
 
 <script>
-    // 逻辑部分保持不变，确保 api 路径正确
     const MASTER_API = "/api";
     const CLIENT_API = "http://127.0.0.1:8082/api/kv";
     let myChart = echarts.init(document.getElementById('ring-chart'));
     const STORAGE_API = "http://127.0.0.1:8085";
+
+    // --- 新增：清空控制台函数 ---
+    function clearConsole() {
+        const resBox = document.getElementById("kv-result");
+        // 重置为初始状态，保留等待提示
+        resBox.innerHTML = '<span class="cmd">> Waiting for instructions...</span>';
+    }
+    // -------------------------
 
     function refreshStatus() {
         fetch(`${MASTER_API}/nodes`)
@@ -190,12 +209,16 @@
     function kvOp(type) {
         const key = document.getElementById("kv-key").value;
         const value = document.getElementById("kv-value").value;
+        const replicas = document.getElementById("kv-replicas").value || 3;
         const resBox = document.getElementById("kv-result");
 
         if (!key) return;
 
         let url = `${CLIENT_API}/${type}?key=${key}`;
-        if (type === 'save') url += `&value=${encodeURIComponent(value)}`;
+
+        if (type === 'save') {
+            url += `&value=${encodeURIComponent(value)}&repeat=${replicas}`;
+        }
 
         resBox.innerHTML += `<div class="cmd mt-2">> [${type.toUpperCase()}] ${key}</div>`;
 
@@ -205,7 +228,6 @@
                 resBox.innerHTML += `<div class="success">Response: ${data}</div>`;
                 resBox.scrollTop = resBox.scrollHeight;
 
-                // 如果是写入操作，调用 sendClientRequest 向主节点发送请求
                 if (type === 'save') {
                     sendClientRequest();
                 }
@@ -215,6 +237,26 @@
             });
     }
 
+    function sendClientRequest() {
+        const key = document.getElementById('kv-key').value;
+        const value = document.getElementById('kv-value').value;
+        const replicas = document.getElementById("kv-replicas").value || 3;
+        const resBox = document.getElementById("kv-result");
+
+        if (!key) return;
+
+        const url = `${CLIENT_API}/save?key=${encodeURIComponent(key)}&value=${encodeURIComponent(value)}&repeat=${replicas}`;
+
+        fetch(url, { method: 'POST' })
+            .then(res => res.text())
+            .then(data => {
+                resBox.innerHTML += `<div class="success">Response (Client): ${data}</div>`;
+                resBox.scrollTop = resBox.scrollHeight;
+            })
+            .catch(err => {
+                resBox.innerHTML += `<div class="error">Error: ${err}</div>`;
+            });
+    }
 
     function queryRoute() {
         const key = document.getElementById('route-key').value;
@@ -222,20 +264,17 @@
 
         if (!key) return;
 
-        // 获取路由信息
         fetch(`${MASTER_API}/route?key=${key}&replicas=${replicas}`)
             .then(res => res.json())
             .then(data => {
                 const resultDiv = document.getElementById('route-result');
                 resultDiv.classList.remove('d-none');
 
-                // 获取 primary 节点并拆分为 host 和 port
                 const [host, port] = data.primary.split(':');
                 const replicas = data.replicas;
 
                 document.getElementById('res-primary').innerText = `${host}:${port}`;
 
-                // 显示副本节点
                 const secondaryContainer = document.getElementById('res-secondary');
                 if (secondaryContainer) {
                     if (data.secondary && data.secondary.length > 0) {
@@ -246,12 +285,6 @@
                         secondaryContainer.innerHTML = '<span class="text-muted small">无可用副本节点</span>';
                     }
                 }
-
-                // 返回的 primary 和 replicas 已经处理，可以用于后续的客户端操作
-                console.log('Primary node:', { host, port });
-                console.log('Replicas:', replicas);
-
-                // 可以将 host, port 和 replicas 数组用于后续操作
             })
             .catch(err => {
                 console.error("路由查询失败:", err);
@@ -262,70 +295,39 @@
     function manageNode(action) {
         const ip = document.getElementById('node-ip').value;
         const port = document.getElementById('node-port').value;
-        const nodeId = `${ip}:${port}`;  // 创建 nodeId 为 ip+port
+        const nodeId = `${ip}:${port}`;
 
         if (action === 'addtozk') {
-            // 1. 构建请求体 (Agent 和 Master 共用大部分参数)
             const requestBody = {
-                nodeId:nodeId,
+                nodeId: nodeId,
                 host: ip,
                 port: parseInt(port),
-                dataDir: "F:\\javaProject\\distributedKeyValue\\data\\" + ip+"_"+port,
+                dataDir: "F:\\javaProject\\distributedKeyValue\\data\\" + ip + "_" + port,
                 isPrimary: true,
                 replicas: "",
                 addToRing: true,
-                action: 'start' // Agent 需要这个字段，Master 会忽略它
+                action: 'start'
             };
 
-            // ---------------------- 第一步：调用 Agent 启动物理节点 ----------------------
-            fetch(`${STORAGE_API}/agent/command`, {
+            fetch(`${MASTER_API}/datanode/start-and-join-zk`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody)
             })
-                .then(response => response.json()) // 解析 Agent 的响应
-                .then(agentData => {
-                    // 2. 检查 Agent 是否启动成功
-                    if (agentData.success === true) {
-                        console.log('Agent 启动成功，准备向 Master 注册...', agentData);
-
-                        // ------------------ 第二步：调用 Master 注册 ZK ------------------
-                        // 注意：这里 return 另一个 fetch Promise，以便链式调用
-                        return fetch(`${MASTER_API}/datanode/start-and-join-zk`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(requestBody) // 直接复用参数，Master 会读取 host/port 等字段
-                        });
-                    } else {
-                        // 如果 Agent 失败，抛出错误，跳过后续的 then，直接进入 catch
-                        throw new Error("Agent 启动失败: " + (agentData.error || agentData.message));
-                    }
-                })
-                .then(masterResponse => {
-                    // 3. 处理 Master 的 HTTP 状态
-                    if (!masterResponse.ok) {
-                        return masterResponse.json().then(err => { throw err; });
-                    }
-                    return masterResponse.json(); // 解析 Master 的 JSON
-                })
+                .then(response => response.json())
                 .then(masterData => {
-                    // 4. 最终检查 Master 的业务逻辑是否成功
                     if (masterData.success) {
-                        console.log('Master 注册成功', masterData);
                         alert("节点启动并注册成功！");
-                        refreshStatus(); // 刷新页面表格
+                        refreshStatus();
                     } else {
                         throw new Error("Master 注册失败: " + masterData.message);
                     }
                 })
                 .catch(error => {
-                    // 5. 统一错误捕获（无论是 Agent 挂了，还是 Master 挂了，都会走到这里）
-                    console.error('操作流程失败', error);
                     alert("操作失败: " + (error.message || "未知错误"));
                 });
-
-        } else if (action === 'delete') {
-            // 调用删除节点接口
+        }
+        else if (action === 'delete') {
             fetch(`${MASTER_API}/delete?nodeip=${ip}&port=${port}`, {
                 method: 'POST'
             }).then(() => {
@@ -333,33 +335,6 @@
             });
         }
     }
-    function sendClientRequest() {
-        const key = document.getElementById('kv-key').value;
-        const value = document.getElementById('kv-value').value;
-        const resBox = document.getElementById("kv-result");
-
-        if (!key) return;
-
-        // 这里使用已经拆分的 primary 和 replicas
-        // const primaryHost = "127.0.0.1";  // 从上一步获得的 host
-        // const primaryPort = "7007";  // 从上一步获得的 port
-
-        // 向 primary 节点发送请求
-        const url = `${CLIENT_API}/save?key=${encodeURIComponent(key)}&value=${encodeURIComponent(value)}`;
-
-        // resBox.innerHTML += `<div class="cmd mt-2">> 发送到主节点: ${primaryHost}:${primaryPort}</div>`;
-
-        fetch(url, { method: 'POST' })
-            .then(res => res.text())
-            .then(data => {
-                resBox.innerHTML += `<div class="success">Response: ${data}</div>`;
-                resBox.scrollTop = resBox.scrollHeight;
-            })
-            .catch(err => {
-                resBox.innerHTML += `<div class="error">Error: ${err}</div>`;
-            });
-    }
-
 
     refreshStatus();
     setInterval(refreshStatus, 3000);

@@ -8,7 +8,9 @@
         <artifactId>distributedKeyValue</artifactId>
         <version>0.0.1-SNAPSHOT</version>
     </parent>
-
+    <groupId>com.dkv</groupId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>dkv-storage</name>
     <artifactId>dkv-storage</artifactId>
     <dependencies>
         <dependency>
@@ -109,7 +111,13 @@
                 </exclusion>
             </exclusions>
         </dependency>
-<!--        <dependency>-->
+        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.38</version>
+        </dependency>
+        <!--        <dependency>-->
 <!--            <groupId>org.springframework.boot</groupId>-->
 <!--            <artifactId>spring-boot-starter-logging</artifactId>-->
 <!--&lt;!&ndash;            <scope>provided</scope> &lt;!&ndash; 或者删除该依赖 &ndash;&gt;&ndash;&gt;-->

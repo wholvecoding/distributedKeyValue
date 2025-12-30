@@ -132,85 +132,77 @@ public class ReplicationService {
     /**
      * 发送数据到副本节点
      */
-    private boolean sendToReplica(String replicaAddr, KvMessage message) throws Exception {
+    private boolean sendToReplica(String replicaAddr, KvMessage message) { // 移除 throws Exception，内部处理
         String[] parts = replicaAddr.split(":");
         if (parts.length != 2) {
-            throw new IllegalArgumentException("Invalid replica address: " + replicaAddr);
+            logger.error("Invalid replica address: {}", replicaAddr);
+            return false;
         }
 
         String host = parts[0];
         int port = Integer.parseInt(parts[1]);
 
-        final CompletableFuture<KvMessage> responseFuture = new CompletableFuture<>();
+        // 1. 创建 Future 用于接收结果
+        final CompletableFuture<Boolean> resultFuture = new CompletableFuture<>();
 
         Bootstrap b = new Bootstrap();
         b.group(workerGroup)
                 .channel(NioSocketChannel.class)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 3000)
+                .option(ChannelOption.SO_KEEPALIVE, true)
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) {
                         ChannelPipeline pipeline = ch.pipeline();
                         pipeline.addLast(new ObjectEncoder());
                         pipeline.addLast(new ObjectDecoder(ClassResolvers.cacheDisabled(null)));
-                        pipeline.addLast(new ReplicationClientHandler());
+                        // FIX: 将 future 传递给 Handler，以便收到响应时通知主线程
+                        pipeline.addLast(new ReplicationClientHandler(resultFuture, message.getKey()));
                     }
-                })
-                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 3000)
-                .option(ChannelOption.SO_KEEPALIVE, true);
+                });
 
         Channel channel = null;
         try {
-            // 连接到副本节点
             ChannelFuture connectFuture = b.connect(host, port);
 
-            // 等待连接建立，设置连接超时
+            // 等待连接
             if (!connectFuture.await(3000, TimeUnit.MILLISECONDS)) {
-                logger.warn("Connection timeout to replica: {}", replicaAddr);
+                logger.warn("Connect timeout to {}", replicaAddr);
                 return false;
             }
 
             if (!connectFuture.isSuccess()) {
-                logger.warn("Failed to connect to replica {}: {}", replicaAddr, connectFuture.cause().getMessage());
+                logger.warn("Connect failed to {}: {}", replicaAddr, connectFuture.cause().getMessage());
                 return false;
             }
 
             channel = connectFuture.channel();
 
             // 发送消息
-            ChannelFuture sendFuture = channel.writeAndFlush(message);
+            channel.writeAndFlush(message).addListener((ChannelFutureListener) future -> {
+                if (!future.isSuccess()) {
+                    logger.error("Write failed to {}", replicaAddr, future.cause());
+                    // 发送失败直接标记 Future 为失败
+                    resultFuture.complete(false);
+                }
+            });
 
-            // 等待发送完成
-            sendFuture.await(1000, TimeUnit.MILLISECONDS);
-            if (!sendFuture.isSuccess()) {
-                logger.warn("Failed to send replication message to {}: {}",
-                        replicaAddr, sendFuture.cause().getMessage());
-                return false;
-            }
+            // 2. 等待结果（这里等待的是 Handler 里的 complete 调用）
+            return resultFuture.get(replicationTimeout, TimeUnit.MILLISECONDS);
 
-            // 等待响应，设置响应超时
-            try {
-                // 只等待响应完成，不关心响应内容
-                responseFuture.get(replicationTimeout, TimeUnit.MILLISECONDS);
-                logger.debug("Received successful response from replica: {}", replicaAddr);
-                return true;
-
-            } catch (TimeoutException e) {
-                logger.warn("Response timeout from replica {} for key: {}", replicaAddr, message.getKey());
-                return false;
-            } catch (Exception e) {
-                logger.error("Error while waiting for response from replica {}: {}",
-                        replicaAddr, e.getMessage());
-                return false;
-            }
-
+        } catch (TimeoutException e) {
+            logger.warn("Replica response timeout: {}", replicaAddr);
+            return false;
+        } catch (Exception e) {
+            logger.error("Replication error: ", e);
+            return false;
         } finally {
-            // 确保连接关闭
-            if (channel != null && channel.isActive()) {
-                channel.close().awaitUninterruptibly(1000, TimeUnit.MILLISECONDS);
+            // 关闭短连接
+            if (channel != null) {
+                channel.close();
             }
         }
     }
-
     /**
      * 处理来自主副本的复制请求
      */
@@ -244,18 +236,30 @@ public class ReplicationService {
 
     // Netty客户端处理器
     private static class ReplicationClientHandler extends SimpleChannelInboundHandler<Object> {
+        private final CompletableFuture<Boolean> future;
+        private final String debugKey;
+
+        public ReplicationClientHandler(CompletableFuture<Boolean> future, String debugKey) {
+            this.future = future;
+            this.debugKey = debugKey;
+        }
+
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
-            // 处理来自副本的响应
             if (msg instanceof KvMessage) {
-                KvMessage response = (KvMessage) msg;
-                logger.debug("Received replication response: {}", response);
+                // 收到回复，标记任务成功
+                logger.debug("Replica ack received for key: {}", debugKey);
+                future.complete(true);
+            } else {
+                logger.warn("Received unknown message type");
             }
         }
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-            logger.error("Replication client error", cause);
+            logger.error("Replication network error", cause);
+            // 发生异常，标记任务失败
+            future.complete(false);
             ctx.close();
         }
     }

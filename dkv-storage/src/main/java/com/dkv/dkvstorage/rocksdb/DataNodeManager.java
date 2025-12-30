@@ -3,6 +3,7 @@ package com.dkv.dkvstorage.rocksdb;
 import com.dkv.dkvstorage.agent.NettyAgentClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +16,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 @Component
+@Data
 public class DataNodeManager {
     private static final Logger logger = LoggerFactory.getLogger(DataNodeManager.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -35,6 +37,7 @@ public class DataNodeManager {
     public DataNodeManager() {
         System.out.println("DataNodeManager 实例被创建: " + System.identityHashCode(this));
     }
+    @Data
     public static class NodeInfo {
         private String nodeId;
         private String host;
@@ -56,16 +59,7 @@ public class DataNodeManager {
             this.startTime = System.currentTimeMillis();
         }
 
-        // getters and setters
-        public String getNodeId() { return nodeId; }
-        public String getHost() { return host; }
-        public int getPort() { return port; }
-        public String getDataDir() { return dataDir; }
-        public boolean isPrimary() { return isPrimary; }
-        public List<String> getReplicas() { return replicas; }
-        public long getStartTime() { return startTime; }
-        public NodeStatus getStatus() { return status; }
-        public void setStatus(NodeStatus status) { this.status = status; }
+
     }
 
     public enum NodeStatus {
@@ -104,7 +98,8 @@ public class DataNodeManager {
                     payload,
                     Map.class
             );
-
+            logger.info("当前请求agent/command放回的结果为"+response.getStatusCode());
+            logger.info(String.valueOf(response));
             if (response.getStatusCode() == HttpStatus.OK &&
                     Boolean.TRUE.equals(response.getBody().get("success"))) {
 

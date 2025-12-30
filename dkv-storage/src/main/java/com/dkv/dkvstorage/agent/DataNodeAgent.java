@@ -152,6 +152,7 @@ public class DataNodeAgent {
                             replicationFactor
                     );
 
+
                     node.start();
                     runningNodes.put(nodeId, node);
 

@@ -8,10 +8,11 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.serialization.ClassResolvers;
 import io.netty.handler.codec.serialization.ObjectDecoder;
 import io.netty.handler.codec.serialization.ObjectEncoder;
+import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -21,15 +22,16 @@ import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.zookeeper.CreateMode;
 
+@Data
 public class DataNode {
     private static final Logger logger = LoggerFactory.getLogger(DataNode.class);
 
-    private final String nodeId;
-    private final String dataDir;
-    private final int port;
-    private final boolean isPrimary;
-    private final List<String> replicaNodes;
-    private final int replicationFactor;
+    private  String nodeId;
+    private  String dataDir;
+    private  int port;
+    private  boolean isPrimary;
+    private  List<String> replicaNodes;
+    private  int replicationFactor;
 
     private StorageEngine storageEngine;
     private ReplicationService replicationService;
@@ -48,6 +50,11 @@ public class DataNode {
         this.replicationFactor = replicationFactor;
     }
 
+    // 如果其他地方也报错，可能还需要加 getNodeId() 等
+
+    public List<String> getReplicas(){
+        return this.replicaNodes;
+    }
     public void start() throws Exception {
         logger.info("Starting DataNode {} on port {}", nodeId, port);
         logger.info("Data directory: {}", dataDir);
@@ -62,15 +69,14 @@ public class DataNode {
         replicationService = new ReplicationService(storageEngine, replicaNodes, isPrimary, replicationFactor);
 
         // 3. 启动Netty服务器
-        startNettyServer();
+        startNettyServer(false);
 
-//        startNettyServer();
         registerToZookeeper("127.0.0.1:2181");
 
         logger.info("DataNode {} started successfully", nodeId);
     }
 
-    private void startNettyServer() throws Exception {
+    private void startNettyServer(Boolean isPrior) throws Exception {
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup(4);
 
@@ -90,7 +96,7 @@ public class DataNode {
 
                             // 添加业务处理器
                             pipeline.addLast(new DkvServerHandler(
-                                    storageEngine, replicationService, isPrimary));
+                                    storageEngine, replicationService, isPrior));
                         }
                     })
                     .option(ChannelOption.SO_BACKLOG, 128)
@@ -154,6 +160,38 @@ public class DataNode {
                     .forPath(path);
             logger.info("注册成功: {}", path);
         }
+    }
+    public void updateReplicationService(List<String> newReplicaNodes, int newReplicationFactor) throws Exception {
+        logger.info("收到更新指令，准备热重启...");
+
+        //Step A: 【必须】先关掉旧的监听，释放 7007 端口
+        shutdownNettyOnly();
+
+        // Step B: 更新内存配置
+        this.replicaNodes = new ArrayList<>(newReplicaNodes);
+        this.replicationFactor = newReplicationFactor;
+        logger.info("当前的所有从节点，"+this.replicaNodes);
+        // Step C: 创建“第二版”服务（包含分发逻辑）
+        this.replicationService = new ReplicationService(storageEngine, replicaNodes, true, replicationFactor);
+
+        // Step D: 【必须】重新启动监听！
+        // 这次启动后，Netty 用的是上面 Step C 创建的新 service
+        // 所以它拥有了分发功能！
+        startNettyServer(true);
+
+        logger.info("热重启完成，现在支持分发到: {}", newReplicaNodes);
+    }
+    private void shutdownNettyOnly() {
+        // 优雅关闭，确保端口释放
+        if (serverChannel != null) {
+            try { serverChannel.close().sync(); } catch (Exception e) {}
+            serverChannel = null;
+        }
+        if (bossGroup != null) bossGroup.shutdownGracefully();
+        if (workerGroup != null) workerGroup.shutdownGracefully();
+        // 置为 null 很重要，方便下一次 startNettyServer 重新 new
+        bossGroup = null;
+        workerGroup = null;
     }
 
 }

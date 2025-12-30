@@ -28,7 +28,11 @@ public class NodeOrchestrationService {
         this.clusterManager = clusterManager;
         this.router = router;
     }
+    public boolean stop(String nodeId){
+        boolean b = dataNodeManager.stopDataNode(nodeId);
+        return b;
 
+    }
     public Map<String, Object> startAndRegister(StartNodeRequest req) throws Exception {
         String nodeId = req.getNodeId();
         String host = req.getHost();

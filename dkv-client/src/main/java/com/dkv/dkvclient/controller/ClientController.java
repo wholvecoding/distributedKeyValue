@@ -27,9 +27,9 @@ public class ClientController {
     // 保存键值
     // curl -x "" -X POST "http://127.0.0.1:8082/api/kv/save?key=name&value=hty"
     @PostMapping("/save")
-    public String save(@RequestParam String key, @RequestParam String value) {
+    public String save(@RequestParam String key, @RequestParam String value, @RequestParam Integer repeat) {
         try {
-            client.put(key, value.getBytes());
+            client.put(key, value.getBytes(),repeat);
             return "Saved key: " + key + ", value: " + value;
         } catch (Exception e) {
             e.printStackTrace();

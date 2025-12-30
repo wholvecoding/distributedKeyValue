@@ -23,8 +23,9 @@ public class DkvServerHandler extends SimpleChannelInboundHandler<KvMessage> {
     }
 
     @Override
-    protected void channelRead0(ChannelHandlerContext ctx, KvMessage msg) throws Exception {
-        logger.debug("Received message: {}", msg);
+    protected void channelRead0(ChannelHandlerContext ctx, KvMessage msg) {
+        logger.debug("Received message type: {}, key: {}, isReplication: {}",
+                msg.getType(), msg.getKey(), msg.isReplication());
 
         KvMessage response = new KvMessage(KvMessage.Type.RESPONSE, msg.getKey(), null);
         response.setRequestId(msg.getRequestId());
@@ -32,7 +33,18 @@ public class DkvServerHandler extends SimpleChannelInboundHandler<KvMessage> {
         try {
             switch (msg.getType()) {
                 case PUT:
+                    // 处理客户端直接发来的 PUT
                     handlePut(ctx, msg, response);
+                    break;
+
+                case REPLICATION_PUT:
+                    // 【关键修复】直接在这里写入，不要委托给 ReplicationService
+                    // 只要收到这个消息，就意味着这是一个强制写入指令
+                    storageEngine.put(msg.getKey(), msg.getValue());
+
+                    logger.debug("Replica data written for key: {}", msg.getKey());
+                    response.setStatusCode(200);
+                    response.setMessage("Replication OK");
                     break;
 
                 case GET:
@@ -41,13 +53,6 @@ public class DkvServerHandler extends SimpleChannelInboundHandler<KvMessage> {
 
                 case DELETE:
                     handleDelete(ctx, msg, response);
-                    break;
-
-                case REPLICATION_PUT:
-                    // 处理复制请求
-                    replicationService.handleReplicationRequest(msg);
-                    response.setStatusCode(200);
-                    response.setMessage("Replication OK");
                     break;
 
                 default:
@@ -73,28 +78,32 @@ public class DkvServerHandler extends SimpleChannelInboundHandler<KvMessage> {
             return;
         }
 
-        // 写入本地存储
+        // 1. 如果我是从节点，且收到了普通的 PUT 请求（非 REPLICATION_PUT）
+        // 这里需要根据你的架构决定：是拒绝写入？还是允许从节点写入？
+        // 通常建议从节点只读，或者转发给主节点。
+        // 这里假设暂允许写入，或者你确保客户端只会把 PUT 发给主节点。
+
+        // 写入本地
         storageEngine.put(key, value);
-
-        // 如果是主节点，需要复制到从节点
-        if (isPrimary && !msg.isReplication()) {
-            boolean replicationSuccess = replicationService.syncReplicate(msg, key, value);
-
-            if (replicationSuccess) {
+        logger.info("当前是否为主节点: "+this.isPrimary);
+        // 2. 只有【主节点】且【非复制消息】才触发同步
+        if (this.isPrimary && !msg.isReplication()) {
+            // 调用同步复制
+            boolean success = replicationService.syncReplicate(msg, key, value);
+            if (success) {
                 response.setStatusCode(200);
-                response.setMessage("Put successful with replication");
+                response.setMessage("Put success (Replicated)");
             } else {
-                // 复制失败，可能需要回滚或记录警告
-                response.setStatusCode(202);  // Accepted但复制不完全
-                response.setMessage("Put successful but replication incomplete");
-                logger.warn("PUT Replication incomplete for key: {}", key);
+                response.setStatusCode(202); // 202 Accepted: 已写入主，但复制失败
+                response.setMessage("Put success (Replication failed)");
+                logger.warn("Replication failed for key: {}", key);
             }
         } else {
+            // 从节点直接返回成功（或者单机模式）
             response.setStatusCode(200);
-            response.setMessage("Put successful");
+            response.setMessage("Put success (Local)");
         }
     }
-
     private void handleGet(ChannelHandlerContext ctx, KvMessage msg, KvMessage response) throws Exception {
         String key = msg.getKey();
 

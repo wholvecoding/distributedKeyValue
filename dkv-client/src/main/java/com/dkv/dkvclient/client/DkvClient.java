@@ -2,9 +2,11 @@ package com.dkv.dkvclient.client;
 
 import com.dkv.dkvcommon.model.KvMessage;
 import com.dkv.dkvstorage.KvClientHandler;
+import com.dkv.dkvstorage.rocksdb.DataNode;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.serialization.ClassResolvers;
 import io.netty.handler.codec.serialization.ObjectDecoder;
@@ -13,6 +15,8 @@ import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.zookeeper.Watcher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
@@ -27,6 +31,7 @@ public class DkvClient {
     private final String zkAddress;  // ZooKeeper 地址
     private final List<String> nodes = new ArrayList<>();
     private CuratorFramework zkClient;
+    private static final Logger logger = LoggerFactory.getLogger(DataNode.class);
 
     public DkvClient(String zkAddress) {
         this.zkAddress = zkAddress;
@@ -76,17 +81,44 @@ public class DkvClient {
         if (response == null || !response.containsKey("primary")) {
             return null;
         }
-
+        logger.warn((String) response.get("primary")+"上的key:"+key+"已经被删除了");
         return (String) response.get("primary");
+    }
+    private Map<String, Object> getRouteData(String key,Integer repeat) {
+        String url = "http://localhost:8081/api/route?key=" + key+"&replicas=" + repeat;
+
+        RestTemplate restTemplate = new RestTemplate();
+        Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+
+        if (response == null || !response.containsKey("primary")) {
+            return null;
+        }
+
+        // 直接返回解析后的 Map，或者你可以自己在这里过滤一下只返回这两个字段
+        return response;
     }
 
     /** PUT 操作 */
-    public String put(String key, byte[] value) throws InterruptedException {
+    public String put(String key, byte[] value,Integer repeat) throws InterruptedException {
         KvMessage message = new KvMessage(KvMessage.Type.PUT, key, value);
-        String primaryNode = getTargetIp(key);
-        System.out.println("向节点{}发送请求"+primaryNode);
-        sendRequest(primaryNode, message);
-        return primaryNode;
+        Map<String, Object> data = getRouteData(key,repeat);
+        if (data != null) {
+            String primary = (String) data.get("primary");
+            List<String> replicas = (List<String>) data.get("replicas"); // 需要强转
+            logger.info("当前的replicas  "+replicas);
+            String replicasParam = String.join(",", replicas);
+            String url = "http://localhost:8085/agent/set?nodeId=" +primary +"&replicas=" + replicasParam;
+
+            RestTemplate restTemplate = new RestTemplate();
+            Map<String, Object> response1 = restTemplate.getForObject(url, Map.class);
+            logger.info("向节点 "+primary+"发送请求");
+            sendRequest(primary, message);
+            return primary;
+            // ...
+        }else{
+            return "error";
+        }
+
     }
 
     /** GET 操作 */
@@ -103,57 +135,71 @@ public class DkvClient {
     }
 
     /** 使用 Netty 发送请求并返回响应 */
-    private KvMessage sendRequest(String nodeIp, KvMessage request) throws InterruptedException {
+    private static final EventLoopGroup workerGroup = new NioEventLoopGroup();
+
+    private KvMessage sendRequest(String nodeIp, KvMessage request) {
         String[] parts = nodeIp.split(":");
         String host = parts[0];
         int port = Integer.parseInt(parts[1]);
 
-        EventLoopGroup group = new NioEventLoopGroup();
+        // 1. 创建 Future 用于接收结果
+        CompletableFuture<KvMessage> responseFuture = new CompletableFuture<>();
+
+        Bootstrap b = new Bootstrap();
+        b.group(workerGroup) // 复用全局线程池
+                .channel(NioSocketChannel.class)
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 3000) // 连接超时
+                .handler(new ChannelInitializer<SocketChannel>() {
+                    @Override
+                    protected void initChannel(SocketChannel ch) {
+                        ch.pipeline().addLast(
+                                new ObjectEncoder(),
+                                new ObjectDecoder(ClassResolvers.cacheDisabled(null)),
+                                // 2. 直接在这里把 future 传给 Handler
+                                new SimpleChannelInboundHandler<KvMessage>() {
+                                    @Override
+                                    protected void channelRead0(ChannelHandlerContext ctx, KvMessage msg) {
+                                        // 收到消息，完成 future
+                                        responseFuture.complete(msg);
+                                    }
+
+                                    @Override
+                                    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+                                        // 发生异常，通知 future 失败
+                                        responseFuture.completeExceptionally(cause);
+                                        ctx.close();
+                                    }
+                                }
+                        );
+                    }
+                });
+
+        Channel channel = null;
         try {
-            Bootstrap b = new Bootstrap();
-            ClientHandler handler = new ClientHandler();
-            b.group(group)
-                    .channel(NioSocketChannel.class)
-                    .handler(new ChannelInitializer<>() {
-                        @Override
-                        protected void initChannel(Channel ch) {
-                            ch.pipeline().addLast(
-                                    new ObjectEncoder(),
-                                    new ObjectDecoder(ClassResolvers.cacheDisabled(null)),
-                                    handler
-                            );
-                        }
-                    });
-            ChannelFuture future = b.connect(host, port).sync();
-            CompletableFuture<KvMessage> responseFuture = new CompletableFuture<>();
+            // 连接
+            ChannelFuture connectFuture = b.connect(host, port).sync();
+            channel = connectFuture.channel();
 
-// 添加 handler 时，把 responseFuture 传入 handler
-            future.channel().pipeline().addLast(new KvClientHandler(responseFuture));
+            // 发送请求
+            System.out.println("Request sent to " + nodeIp + ", waiting for response...");
+            channel.writeAndFlush(request);
 
-// 发送请求
-            future.channel().writeAndFlush(request).sync();
-            System.out.println("Request sent, waiting for response...");
+            // 3. 等待结果 (等待 Handler 调用 complete)
+            KvMessage response = responseFuture.get(5, TimeUnit.SECONDS);
+            System.out.println("Got response: " + response);
+            return response;
 
-            try {
-                // 等待响应，最多 5 秒
-                KvMessage response = responseFuture.get(1, TimeUnit.SECONDS);
-                System.out.println("Got response: " + response);
-            } catch (TimeoutException e) {
-                System.out.println("Response timed out, closing channel...");
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                // 超时或正常都要安全关闭 channel
-                future.channel().close().sync();
-                future.channel().closeFuture().sync();
-            }
-
-
-            return handler.getResponse();
+        } catch (TimeoutException e) {
+            System.out.println("Response timed out from " + nodeIp);
+            throw new RuntimeException("Request timeout", e);
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
+            throw new RuntimeException("Request failed: " + e.getMessage(), e);
         } finally {
-            group.shutdownGracefully();
+            // 4. 关闭连接 (注意：不要关闭 workerGroup，只关闭 channel)
+            if (channel != null) {
+                channel.close();
+            }
         }
     }
     public byte[] testIP(String IP, String key) throws InterruptedException {
